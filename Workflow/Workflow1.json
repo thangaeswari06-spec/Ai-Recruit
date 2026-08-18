@@ -1,0 +1,693 @@
+{
+  "name": "Workflow 1 - AI Job Creation & Publishing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-intelligence",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "171526ca-369e-4c66-8d85-66f2e4e096e7",
+      "name": "Create Job (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        368
+      ],
+      "webhookId": "d4fbecd3-5bc6-4c62-8dac-7162c5a64c7a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "leftValue": "={{ $json.body.department }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "06c41cba-f002-4f89-91e5-0630152b36e0",
+      "name": "Validate Job Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": \"title and department are required\" } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "dc0b6da3-3b46-4408-8cd9-1675a2e58787",
+      "name": "Respond - Invalid Input",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.4, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are an expert technical recruiter. Given a job title, department, location and experience level, produce a complete job posting. Return ONLY valid JSON with keys: description (string, full JD in markdown), skills (array of strings), experience_level (string), summary (string, 1 line).' }, { role: 'user', content: 'Title: ' + $json.body.title + '\\nDepartment: ' + $json.body.department + '\\nLocation: ' + ($json.body.location || 'Not specified') + '\\nExperience Level: ' + ($json.body.experience_level || 'Not specified') + '\\nExtra notes: ' + ($json.body.notes || 'None') } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "66642cd9-13e9-4770-ad8e-f31a4c0383c5",
+      "name": "AI Agent - Generate JD + Skills + Experience",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -32,
+        288
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet parsed;\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = { description: raw, skills: [], experience_level: '' }; }\nconst input = $('Create Job (Webhook)').first().json.body;\nreturn [{ json: {\n  title: input.title,\n  department: input.department,\n  location: input.location || '',\n  experience_level: parsed.experience_level || input.experience_level || '',\n  skills: parsed.skills || [],\n  description: parsed.description || '',\n  created_by: input.created_by || null\n} }];"
+      },
+      "id": "4d8dec84-24cc-4fd5-9dea-a2cfd12820f4",
+      "name": "Parse JD/Skills/Experience",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are a DEI and job-quality auditor. Review the job description for biased/exclusionary language, unrealistic requirements and clarity. Return ONLY JSON: { \"pass\": boolean, \"quality_score\": number (0-100), \"issues\": array of strings, \"suggestions\": string }. pass=true only if quality_score >= 75 and no bias issues.' }, { role: 'user', content: JSON.stringify($json) } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "8708fb41-751e-4be8-9c7e-a5e20a2eb246",
+      "name": "AI Bias & Quality Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        512,
+        288
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet review; try { review = JSON.parse(raw); } catch(e) { review = { pass: true, quality_score: 100, issues: [], suggestions: '' }; }\nconst job = $('Parse JD/Skills/Experience').first().json;\nreturn [{ json: { ...job, review } }];"
+      },
+      "id": "48860c28-7306-466c-bb22-613e98aba404",
+      "name": "Parse Quality Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.review.pass }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bff79403-cc0f-473e-bab4-8bae149381b2",
+      "name": "Quality Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        912,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.3, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Rewrite the job description fixing the listed issues. Return ONLY JSON with keys: description, skills (array), experience_level.' }, { role: 'user', content: 'Original: ' + $json.description + '\\nIssues to fix: ' + JSON.stringify($json.review.issues) + '\\nSuggestions: ' + $json.review.suggestions } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "77ad9e87-3ba2-4e9f-9ddb-25e96dfac2f3",
+      "name": "AI Improve JD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        944,
+        560
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet parsed; try { parsed = JSON.parse(raw); } catch(e) { parsed = {}; }\nconst job = $('Parse Quality Check').first().json;\nreturn [{ json: { ...job, description: parsed.description || job.description, skills: parsed.skills || job.skills, experience_level: parsed.experience_level || job.experience_level } }];"
+      },
+      "id": "8be1e88a-288e-433a-8234-01da03f6f73f",
+      "name": "Merge Improved JD",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "jobs",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "department": "={{ $json.department }}",
+            "location": "={{ $json.location }}",
+            "experience_level": "={{ $json.experience_level }}",
+            "skills": "={{ $json.skills }}",
+            "description": "={{ $json.description }}",
+            "status": "open",
+            "created_by": "={{ $json.created_by }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "department",
+              "displayName": "department",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "experience_level",
+              "displayName": "experience_level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "skills",
+              "displayName": "skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_by",
+              "displayName": "created_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b19cedbd-0e60-47dc-8883-98d796f79f6c",
+      "name": "Publish Job (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1232,
+        272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, job: $json } }}",
+        "options": {}
+      },
+      "id": "c033af21-cbc1-4403-8578-9e778a766498",
+      "name": "Respond - Job Published",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udfe2 Start\nThe 'Create Job' form sends the job details here (title, department, location, etc.) to kick off the AI pipeline.",
+        "height": 140,
+        "width": 260,
+        "color": 5
+      },
+      "id": "72483b34-f9cd-4299-8bdc-3a91c75b3e72",
+      "name": "Sticky Note 7250",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -688,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\u2705 Check Input\nMakes sure title and department are filled in. If not, stops here with an error \u2014 saves an AI call.",
+        "height": 124,
+        "width": 280,
+        "color": 5
+      },
+      "id": "07a24596-451f-402f-83ea-4fc1ae2cfa8b",
+      "name": "Sticky Note 1981",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 AI writes the job post\nSends the job details to Mistral AI, which writes the full description, required skills, and experience level.",
+        "height": 128,
+        "width": 328,
+        "color": 5
+      },
+      "id": "be478ad1-24c8-4bbc-a8f9-9f0d689ef132",
+      "name": "Sticky Note 1853",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\uddf9 Clean the AI's answer\nTakes the AI's reply and merges it with the original form data so it's ready to save.",
+        "height": 124,
+        "width": 260,
+        "color": 5
+      },
+      "id": "b47f1a06-6180-4053-bb2e-bcc28b82ffa6",
+      "name": "Sticky Note 4315",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd0d AI checks its own work\nA second Mistral AI call reviews the job post for bias or quality issues and gives a pass/fail score.",
+        "height": 128,
+        "width": 340,
+        "color": 5
+      },
+      "id": "1b4c0776-a190-48a3-a2c3-e99119329fdb",
+      "name": "Sticky Note 6067",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        368,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd01 Pass or fix?\nIf the check failed, the job post gets rewritten. If it passed, it moves on to publish.",
+        "height": 138,
+        "width": 300,
+        "color": 5
+      },
+      "id": "4c201793-ac67-471c-8f53-eab9a7d8af5c",
+      "name": "Sticky Note 5980",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        816,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\u267b\ufe0f AI rewrites the job post\nFixes the issues found in the check, then sends it back to be checked again.",
+        "height": 124,
+        "width": 300,
+        "color": 5
+      },
+      "id": "8c7b21db-e8b8-411f-a434-81444cd4c4a2",
+      "name": "Sticky Note 9580",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\uddc4\ufe0f Save the job\nInserts the finished job post into the `jobs` table in Supabase.",
+        "height": 96,
+        "width": 300,
+        "color": 5
+      },
+      "id": "53ced720-5879-447c-b816-3faffc092668",
+      "name": "Sticky Note 3680",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1152,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udce4 Send result back\nSends the finished job post back to the website so it can show the recruiter.",
+        "height": 120,
+        "width": 260,
+        "color": 5
+      },
+      "id": "8e914aba-623c-4c1e-bc5c-4d7c37262925",
+      "name": "Sticky Note 2154",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1504,
+        112
+      ]
+    }
+  ],
+  "connections": {
+    "Create Job (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Validate Job Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Job Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Generate JD + Skills + Experience",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Invalid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Generate JD + Skills + Experience": {
+      "main": [
+        [
+          {
+            "node": "Parse JD/Skills/Experience",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JD/Skills/Experience": {
+      "main": [
+        [
+          {
+            "node": "AI Bias & Quality Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Bias & Quality Check": {
+      "main": [
+        [
+          {
+            "node": "Parse Quality Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Quality Check": {
+      "main": [
+        [
+          {
+            "node": "Quality Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Passed?": {
+      "main": [
+        [
+          {
+            "node": "Publish Job (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Improve JD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Improve JD": {
+      "main": [
+        [
+          {
+            "node": "Merge Improved JD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Improved JD": {
+      "main": [
+        [
+          {
+            "node": "AI Bias & Quality Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Job (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "Respond - Job Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ea1280cb-c459-4a8b-a082-584aec04ed40",
+  "meta": {
+    "instanceId": "ai-recruitment-system"
+  },
+  "nodeGroups": [],
+  "id": "8075969c-ef06-4dc3-a214-deaa066738e3",
+  "tags": []
+}

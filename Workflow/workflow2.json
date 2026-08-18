@@ -1,0 +1,876 @@
+{
+  "name": "Workflow 2 - AI Candidate Processing & Scoring",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resume-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "312ad088-f2d0-4a17-b7ad-eff672a3f055",
+      "name": "Resume Upload (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1312,
+        384
+      ],
+      "webhookId": "9f1638b5-8de2-47b8-957d-e43542bfb959"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $binary.resume.fileExtension }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "7d7d69a7-1d1b-4b52-85b1-7a71cc793c75",
+      "name": "File Validation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Only PDF resumes are supported' } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "0a27ab50-ca06-4f4a-8d26-e1ad51de3dc7",
+      "name": "Respond - Invalid File",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -864,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "resume",
+        "options": {}
+      },
+      "id": "b6086c43-cb1e-462a-9512-4ac12139ea75",
+      "name": "PDF/Text Extraction",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($json.text || '').replace(/\\s+/g, ' ').replace(/\\u0000/g, '').trim();\nconst webhookData = $('Resume Upload (Webhook)').first().json.body || {};\nreturn [{ json: {\n  resume_text: text.slice(0, 15000),\n  name: webhookData.candidate_name || webhookData.name || '',\n  email: webhookData.candidate_email || webhookData.email || '',\n  phone: webhookData.candidate_phone || webhookData.phone || '',\n  location: webhookData.location || '',\n  job_id: webhookData.job_id || null,\n  resume_url: webhookData.resume_url || ''\n} }];"
+      },
+      "id": "03c6e33e-e3f7-4dfe-b4cc-36d26988db2d",
+      "name": "Document Cleaning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.2, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Extract a structured candidate profile from the resume text. Return ONLY JSON with keys: skills (array), experience_years (number), experience (array of {company, title, duration}), education (array of {degree, institution, year}), projects (array of strings), certifications (array of strings), achievements (array of strings), summary (string).' }, { role: 'user', content: $json.resume_text } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "6de481b5-9a79-4ca8-9b54-f51bd3f35dc1",
+      "name": "LLM Resume Parser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -416,
+        304
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet p; try { p = JSON.parse(raw); } catch(e) { p = { skills: [], experience_years: 0 }; }\nconst base = $('Document Cleaning').first().json;\nreturn [{ json: { ...base, profile: p } }];"
+      },
+      "id": "92221750-2c92-4cad-a0d9-2498135b242f",
+      "name": "Structured Candidate Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "analysis",
+              "type": "object",
+              "value": "={{ $json.profile }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "426e5e51-d1c9-4043-850b-555611d23033",
+      "name": "AI Analysis (Skills/Exp/Edu/Projects)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        32,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "192c9682-cd63-40e3-b1bf-82ed61847892",
+      "name": "Merge Profile + Embedding",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        256,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "candidates",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.name }}",
+            "email": "={{ $json.email }}",
+            "phone": "={{ $json.phone }}",
+            "location": "={{ $json.location }}",
+            "resume_url": "={{ $json.resume_url }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resume_url",
+              "displayName": "resume_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {},
+        "operation": "upsert"
+      },
+      "id": "5fa7f5f2-6cb1-435c-9f9d-fd9007cf5cfa",
+      "name": "Vector DB - Insert Candidate (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, application: $json } }}",
+        "options": {}
+      },
+      "id": "d8909185-253d-4787-a87c-9e0e21de96d8",
+      "name": "Respond - Resume Processed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2048,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udfe2 Start\nThe 'Upload Resume' form sends the resume file plus candidate name/email/phone here.",
+        "height": 136,
+        "width": 220,
+        "color": 5
+      },
+      "id": "d814f99b-2969-40f1-90c9-fa704cba1cbb",
+      "name": "Sticky Note 9156",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1344,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\u2705 Check the file\nOnly accepts PDF files for now.",
+        "height": 92,
+        "width": 168,
+        "color": 5
+      },
+      "id": "2ee19347-ee85-4cc3-a001-499bbf07809f",
+      "name": "Sticky Note 6631",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1088,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udcc4 Read the PDF\nPulls the plain text out of the resume file \u2014 this is free and built into n8n.",
+        "height": 120,
+        "width": 220,
+        "color": 5
+      },
+      "id": "c8eee6e6-c290-4f94-a5a7-60c98e53245e",
+      "name": "Sticky Note 1113",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\uddf9 Tidy the text\nRemoves extra spaces and trims very long resumes so the AI call stays fast and cheap.",
+        "height": 140,
+        "width": 230,
+        "color": 5
+      },
+      "id": "d45d0990-d995-41b9-83af-47e5a6dbcbeb",
+      "name": "Sticky Note 2988",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 AI reads the resume\nMistral AI pulls out skills, experience, education, projects and certifications from the text.",
+        "width": 218,
+        "color": 5
+      },
+      "id": "e689301c-89f4-4342-9f96-2d2420618d39",
+      "name": "Sticky Note 5432",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd00 Two things happen at once\nTop: AI turns the resume into a structured profile.\nBottom: AI turns the resume into a search vector (embedding) so it can be found later.",
+        "height": 164,
+        "width": 268,
+        "color": 5
+      },
+      "id": "524567b9-d7a5-460d-bbd5-cbd84ebff3c6",
+      "name": "Sticky Note 8303",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd17 Combine\nJoins the structured profile and the search vector back into one record.",
+        "height": 148,
+        "width": 184,
+        "color": 5
+      },
+      "id": "b3814772-67d8-45f6-91dc-c9dc9f9ef5ae",
+      "name": "Sticky Note 6791",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        272,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\uddc4\ufe0f Save the candidate\nCreates the candidate row, and the application row linking this candidate to the job, in Supabase.",
+        "height": 148,
+        "width": 228,
+        "color": 5
+      },
+      "id": "617b430f-dfe5-4f67-b45a-42ef4cdec219",
+      "name": "Sticky Note 1599",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        448,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udce4 Send result back\nSends the saved candidate details back to the website.",
+        "height": 116,
+        "width": 188,
+        "color": 5
+      },
+      "id": "032ddcca-2cb6-428f-8b5b-db7f8aea33dc",
+      "name": "Sticky Note 3160",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        864,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-embed', input: $json.resume_text }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "dfd97011-453c-454a-a69d-a2dab55177db",
+      "name": "Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        32,
+        432
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Document Cleaning').item.json.job_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "06a27879-c2cf-48d1-a6b6-6b16bbc5a6ff",
+      "name": "Has Job ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, title, skills, description FROM jobs WHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $('Document Cleaning').item.json.job_id ] }}"
+        }
+      },
+      "id": "fcf0a5d6-73fa-4975-8353-6a3440cfa1a3",
+      "name": "Get Job For Scoring (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1152,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Score this candidate against the job on 3 dimensions (0-100 each): skills_score, experience_score, projects_score. Also return matched_skills (array) and missing_skills (array) vs the job requirements. Return ONLY JSON.' }, { role: 'user', content: 'JOB: ' + $('Get Job For Scoring (Supabase)').first().json.title + ' | Required skills: ' + ($('Get Job For Scoring (Supabase)').first().json.skills || []).join(', ') + ' | JD: ' + $('Get Job For Scoring (Supabase)').first().json.description + '\\n\\nCANDIDATE RESUME:\\n' + $('Document Cleaning').first().json.resume_text } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "ab4a8a4e-fd72-4220-8936-ce7070e127bc",
+      "name": "AI Candidate Evaluation (Inline)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1376,
+        208
+      ],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet s;\ntry {\n  const raw = input.choices[0].message.content;\n  s = JSON.parse(raw);\n} catch (e) {\n  s = {};\n}\n// Guard: malformed/missing AI fields fall back to 0 instead of NaN -> NULL\nconst skills = Number(s.skills_score) || 0;\nconst experience = Number(s.experience_score) || 0;\nconst projects = Number(s.projects_score) || 0;\nconst weighted = Math.round((skills*0.4) + (experience*0.35) + (projects*0.25));\nconst recommendation = weighted >= 80 ? 'Shortlist Recommended' : weighted >= 60 ? 'Review Required' : 'Not Recommended';\nconst application = $('Insert Application (Raw SQL)').first().json;\nreturn [{ json: {\n  application_id: application.id,\n  weighted_score: weighted,\n  ai_summary: `Skills: ${skills} | Experience: ${experience} | Projects: ${projects} | Recommendation: ${recommendation}`,\n  matched_skills: s.matched_skills || [],\n  missing_skills: s.missing_skills || []\n} }];"
+      },
+      "id": "797e0ee9-6e41-42bf-9ad1-ea0fb9d52e7b",
+      "name": "Calculate Weighted Score (Inline)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE applications SET score = $1, ai_summary = $2, matched_skills = $3, missing_skills = $4\nWHERE id = $5\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ $json.weighted_score, $json.ai_summary, $json.matched_skills, $json.missing_skills, $json.application_id ] }}"
+        }
+      },
+      "id": "0679b134-a187-44f0-bafc-392851bd0129",
+      "name": "Save Score (Application)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1824,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE candidates SET resume_text = $1, embedding = $2::vector\nWHERE id = $3;",
+        "options": {
+          "queryReplacement": "={{ [ $('Merge Profile + Embedding').item.json.resume_text, JSON.stringify($('Embedding').item.json.data[0].embedding), $('Vector DB - Insert Candidate (Supabase)').item.json.id ] }}"
+        }
+      },
+      "id": "a1a1a1a1-0000-4000-8000-000000000001",
+      "name": "Update Candidate Resume+Embedding",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        704,
+        260
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO applications (job_id, candidate_id, stage, matched_skills)\nVALUES ($1, $2, 'applied', $3)\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ $('Document Cleaning').item.json.job_id, $('Vector DB - Insert Candidate (Supabase)').item.json.id, $('Structured Candidate Profile').item.json.profile.skills ] }}"
+        }
+      },
+      "id": "b2b2b2b2-0000-4000-8000-000000000002",
+      "name": "Insert Application (Raw SQL)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        704,
+        380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Resume Upload (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "File Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File Validation": {
+      "main": [
+        [
+          {
+            "node": "PDF/Text Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Invalid File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF/Text Extraction": {
+      "main": [
+        [
+          {
+            "node": "Document Cleaning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Cleaning": {
+      "main": [
+        [
+          {
+            "node": "LLM Resume Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Resume Parser": {
+      "main": [
+        [
+          {
+            "node": "Structured Candidate Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Candidate Profile": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis (Skills/Exp/Edu/Projects)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis (Skills/Exp/Edu/Projects)": {
+      "main": [
+        [
+          {
+            "node": "Merge Profile + Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Profile + Embedding": {
+      "main": [
+        [
+          {
+            "node": "Vector DB - Insert Candidate (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector DB - Insert Candidate (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "Update Candidate Resume+Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge Profile + Embedding",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Has Job ID?": {
+      "main": [
+        [
+          {
+            "node": "Get Job For Scoring (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Resume Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Job For Scoring (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "AI Candidate Evaluation (Inline)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Candidate Evaluation (Inline)": {
+      "main": [
+        [
+          {
+            "node": "Calculate Weighted Score (Inline)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Weighted Score (Inline)": {
+      "main": [
+        [
+          {
+            "node": "Save Score (Application)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Score (Application)": {
+      "main": [
+        [
+          {
+            "node": "Respond - Resume Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Application (Raw SQL)": {
+      "main": [
+        [
+          {
+            "node": "Has Job ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Candidate Resume+Embedding": {
+      "main": [
+        [
+          {
+            "node": "Insert Application (Raw SQL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "efa1af4b-98d5-4d68-bd39-0b7efb8358a2",
+  "meta": {
+    "instanceId": "ai-recruitment-system"
+  },
+  "nodeGroups": [],
+  "id": "e4ce727c-3896-4d96-bac2-e1b56ec951f9",
+  "tags": []
+}

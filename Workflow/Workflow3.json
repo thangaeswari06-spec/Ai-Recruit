@@ -1,0 +1,2830 @@
+{
+  "name": "Workflow 3 - Recruitment Pipeline, Interview & Hiring",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "evaluate-candidates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "fb24af9b-6412-4a8c-8c78-0784aca4ca69",
+      "name": "[Rerank] Evaluate Candidates (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        384
+      ],
+      "webhookId": "35c6cf59-466e-4f33-8830-a2f3d3e27f88"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "jobs",
+          "mode": "list"
+        },
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.body.job_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f16cc52-1ce7-4eec-bd3f-8e4752082e9d",
+      "name": "[Rerank] Get Job Details (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        48,
+        384
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-embed', input: $json.title + ' ' + $json.description + ' Skills: ' + ($json.skills || []).join(', ') }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "f4cf235e-253d-49c7-b03f-6f4773679799",
+      "name": "[Rerank] Generate Job Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        384
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id, c.name, c.email, c.resume_text, c.embedding, a.id as application_id, a.job_id\nFROM candidates c\nJOIN applications a ON a.candidate_id = c.id\nWHERE a.job_id = $1 AND c.embedding IS NOT NULL AND c.resume_text IS NOT NULL\nORDER BY c.embedding <=> $2::vector\nLIMIT 10;",
+        "options": {
+          "queryReplacement": "={{ [ $('[Rerank] Get Job Details (Supabase)').item.json.id, JSON.stringify($json.data[0].embedding) ] }}"
+        }
+      },
+      "id": "e6575f25-ffa7-4ac9-ba40-65643e925752",
+      "name": "[Rerank] Vector Search - Top 20 Candidates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        384
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "77fc3c30-a043-4de0-9966-5afc9ad720d4",
+      "name": "[Rerank] Split Candidates",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        704,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Score this candidate against the job on 3 dimensions (0-100 each): skills_score, experience_score, projects_score. Also return matched_skills (array) and missing_skills (array) vs the job requirements. Return ONLY JSON.' }, { role: 'user', content: 'JOB: ' + $('[Rerank] Get Job Details (Supabase)').first().json.title + ' | Required skills: ' + ($('[Rerank] Get Job Details (Supabase)').first().json.skills || []).join(', ') + ' | JD: ' + $('[Rerank] Get Job Details (Supabase)').first().json.description + '\\n\\nCANDIDATE RESUME:\\n' + $json.resume_text } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "3c43de72-af33-48b1-9922-f81f1cb5ff72",
+      "name": "[Rerank] AI Candidate Evaluation (Skills/Exp/Projects)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        944,
+        368
+      ],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst cand = $('[Rerank] Split Candidates').first().json;\nlet s;\ntry {\n  const raw = input.choices[0].message.content;\n  s = JSON.parse(raw);\n} catch (e) {\n  s = {};\n}\n// Guard: if the AI response is missing/malformed fields (undefined, wrong\n// shape, non-numeric), fall back to 0 per field instead of letting NaN\n// silently turn into NULL when this reaches Postgres.\nconst skills = Number(s.skills_score) || 0;\nconst experience = Number(s.experience_score) || 0;\nconst projects = Number(s.projects_score) || 0;\ns.skills_score = skills; s.experience_score = experience; s.projects_score = projects;\ns.matched_skills = s.matched_skills || []; s.missing_skills = s.missing_skills || [];\nconst weighted = Math.round((skills*0.4) + (experience*0.35) + (projects*0.25));\nreturn [{ json: {\n  candidate_id: cand.id, application_id: cand.application_id, name: cand.name, email: cand.email,\n  skills_score: s.skills_score, experience_score: s.experience_score, projects_score: s.projects_score,\n  matched_skills: s.matched_skills || [], missing_skills: s.missing_skills || [],\n  weighted_score: weighted\n} }];"
+      },
+      "id": "82d155d5-c2c8-4e9c-b864-bfa5c60e2c22",
+      "name": "[Rerank] Calculate Weighted Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        368
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "766ea8f1-630b-41e9-95fa-b47ec33d62ed",
+      "name": "[Rerank] Loop Back",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1424,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all().map(i => i.json);\nall.sort((a,b) => b.weighted_score - a.weighted_score);\nreturn all.slice(0, 5).map(c => ({ json: c }));"
+      },
+      "id": "e12240d8-77f0-464c-8310-a4fb4846bfbb",
+      "name": "[Rerank] Sort & Take Top 5",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.3, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Given ranked candidates with scores, write a 2-3 sentence explanation for EACH candidate on why they are ranked where they are. Return ONLY JSON: { \"explanations\": { \"<candidate_id>\": \"...\" } }' }, { role: 'user', content: JSON.stringify($input.all().map(i => i.json)) } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "a70b66b5-f968-409d-8e9e-0039ff80e0aa",
+      "name": "[Rerank] AI Reranker & Explanation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        640
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet ex; try { ex = JSON.parse(raw).explanations; } catch(e) { ex = {}; }\nconst top5 = $('[Rerank] Sort & Take Top 5').all().map(i => i.json);\nreturn top5.map(c => ({ json: { ...c, explanation: ex[c.candidate_id] || '' } }));"
+      },
+      "id": "a7b9bcd1-3791-44f7-bf9f-63f37f9a46c4",
+      "name": "[Rerank] Attach Explanations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE applications SET score = $1, ai_summary = $2, matched_skills = $3, missing_skills = $4, ai_explanation = $5\nWHERE id = $6;",
+        "options": {
+          "queryReplacement": "={{ [ $json.weighted_score, `Skills: ${$json.skills_score} | Experience: ${$json.experience_score} | Projects: ${$json.projects_score}`, $json.matched_skills, $json.missing_skills, $json.explanation, $json.application_id ] }}"
+        }
+      },
+      "id": "f18f5695-7e4d-4763-a482-15ec8f20dc61",
+      "name": "[Rerank] Update Applications (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1344,
+        640
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, top_candidates: $('[Rerank] Attach Explanations').all().map(i => i.json) } }}",
+        "options": {}
+      },
+      "id": "a3a48083-612d-4807-bfa4-f816370e879b",
+      "name": "[Rerank] Respond - Top 5 Ranked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udfe2 Start\nCalled with a job_id \u2014 either automatically after a job is published, or when a recruiter clicks 'Evaluate with AI'.",
+        "height": 136,
+        "width": 252,
+        "color": 5
+      },
+      "id": "55323d48-1caa-435d-8a31-f5398105cd49",
+      "name": "[Rerank] Sticky Note 9649",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\uddc4\ufe0f Load the job & turn it into a vector\nFetches the job details, then AI converts them into a search vector.",
+        "height": 172,
+        "width": 192,
+        "color": 5
+      },
+      "id": "fba23ea3-ea2c-4070-a268-8fe109d877de",
+      "name": "[Rerank] Sticky Note 2126",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd0e Find close matches\nCompares the job's vector to every candidate's resume vector and pulls the closest 20.",
+        "height": 144,
+        "width": 236,
+        "color": 5
+      },
+      "id": "d94007d8-885d-4d9c-ad14-4f0d3eb9889c",
+      "name": "[Rerank] Sticky Note 2251",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        208,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd01 Go one by one\nProcesses the 20 candidates one at a time through the AI so nothing gets skipped.",
+        "height": 148,
+        "width": 232,
+        "color": 5
+      },
+      "id": "ec414453-d100-449b-a407-dac4534c20fa",
+      "name": "[Rerank] Sticky Note 6286",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        480,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 AI scores each candidate\nRates skills, experience and projects out of 100 for each candidate against the job.",
+        "height": 124,
+        "width": 250,
+        "color": 5
+      },
+      "id": "7e922984-04f6-436e-b9e8-edbcc4638d29",
+      "name": "[Rerank] Sticky Note 5173",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        848,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\u2696\ufe0f Combine the scores\nBlends the three scores into one final number using set weights.",
+        "height": 120,
+        "color": 5
+      },
+      "id": "8cd0e899-4c97-4fc3-8036-e0436a5e546d",
+      "name": "[Rerank] Sticky Note 5455",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1152,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83c\udfc6 Pick the best 5\nSorts everyone by their final score, keeps the top 5, and asks AI to explain why each one ranks where they do.",
+        "height": 140,
+        "color": 5
+      },
+      "id": "5cb0d286-b228-4381-aea8-ac8058e4bf10",
+      "name": "[Rerank] Sticky Note 3130",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        560,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\uddc4\ufe0f Save the results\nWrites each top candidate's score and AI explanation back onto their application.",
+        "height": 156,
+        "width": 232,
+        "color": 5
+      },
+      "id": "28e02cfa-06b4-4507-ae92-80d7be4eb965",
+      "name": "[Rerank] Sticky Note 4424",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udce4 Send result back\nReturns the top 5 ranked candidates to the dashboard.",
+        "height": 132,
+        "width": 192,
+        "color": 5
+      },
+      "id": "41d8a1cb-154f-453d-afdb-0061e28bcafe",
+      "name": "[Rerank] Sticky Note 6460",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE applications SET score = $1, ai_summary = $2, matched_skills = $3, missing_skills = $4\nWHERE id = $5;",
+        "options": {
+          "queryReplacement": "={{ [ $json.weighted_score, `Skills: ${$json.skills_score} | Experience: ${$json.experience_score} | Projects: ${$json.projects_score}`, $json.matched_skills, $json.missing_skills, $json.application_id ] }}"
+        }
+      },
+      "id": "e974a98d-2266-47a5-a6fb-56c900505ca4",
+      "name": "[Rerank] Save Score - Every Candidate (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1184,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "copilot-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "400b3eb2-daa6-4cfa-9c93-816c6f956639",
+      "name": "[Copilot] Copilot Chat (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        1380
+      ],
+      "webhookId": "c5cc2203-71aa-44a1-9d6b-df73694a23ea"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Classify the recruiter question into exactly one intent: \"search_candidates\", \"explain_score\", \"generate_questions\", \"summarize_feedback\", or \"general\". Also extract any job title, candidate name, or IDs mentioned. Return ONLY JSON: { intent, job_title, candidate_name, candidate_id, job_id }.' }, { role: 'user', content: $json.body.message } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "f23c807b-1887-440e-8535-993bb6b1ede4",
+      "name": "[Copilot] Intent Classification (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1008,
+        1380
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet intent; try { intent = JSON.parse(raw); } catch(e) { intent = { intent: 'general' }; }\nconst body = $('[Copilot] Copilot Chat (Webhook)').first().json.body;\nreturn [{ json: { ...intent, message: body.message, recruiter_id: body.recruiter_id || null } }];"
+      },
+      "id": "767a45ec-7f87-4095-9adf-5570b6b5024b",
+      "name": "[Copilot] Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "search_candidates",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "explain_score",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "generate_questions",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "summarize_feedback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "54820844-e6e7-4dc8-919e-4262c06e9116",
+      "name": "[Copilot] Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -432,
+        1332
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-embed', input: $json.job_title || $json.message }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "401f9116-1aa8-4d50-8d1b-214cdb82eff7",
+      "name": "[Copilot] Embed Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -176,
+        1092
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, c.email, a.score, a.matched_skills, a.missing_skills, a.stage\nFROM candidates c JOIN applications a ON a.candidate_id = c.id\nORDER BY c.embedding <=> $1::vector LIMIT 5;",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.data[0].embedding) ] }}"
+        }
+      },
+      "id": "3a0f04e5-7f33-44ef-ac21-ed9b2965cfd0",
+      "name": "[Copilot] Vector Search Candidates (RAG)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        336,
+        1092
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nreturn [{ json: { context: 'Top matching candidates:\\n' + JSON.stringify(rows), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "ab67489b-c4f1-4508-9af4-21708ab4b6d9",
+      "name": "[Copilot] Build Context - Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        1092
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, a.score, a.ai_summary, a.matched_skills, a.missing_skills, a.ai_explanation\nFROM candidates c JOIN applications a ON a.candidate_id = c.id\nWHERE c.name ILIKE $1 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ '%' + ($json.candidate_name || '') + '%' ] }}"
+        }
+      },
+      "id": "f043b130-9b11-4f0e-afcc-7979fc9df813",
+      "name": "[Copilot] Get Candidate + Score (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -176,
+        1268
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first()?.json || {};\nreturn [{ json: { context: 'Candidate score data:\\n' + JSON.stringify(row), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "acbaa339-c2dc-4231-a1c3-07166efe2d80",
+      "name": "[Copilot] Build Context - Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        1268
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, c.resume_text, j.title, j.description, j.skills\nFROM candidates c\nJOIN applications a ON a.candidate_id = c.id\nJOIN jobs j ON j.id = a.job_id\nWHERE c.name ILIKE $1 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ '%' + ($json.candidate_name || '') + '%' ] }}"
+        }
+      },
+      "id": "de2ed970-b60e-436d-b097-20fff144f108",
+      "name": "[Copilot] Get Profile + Job (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -160,
+        1428
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first()?.json || {};\nreturn [{ json: { context: 'Candidate + job for interview questions:\\n' + JSON.stringify(row), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "00374ed3-6fb0-49e4-812a-69a899bfd5d8",
+      "name": "[Copilot] Build Context - Questions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        1428
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, i.feedback, i.rating, i.recommendation\nFROM interviews i\nJOIN applications a ON a.id = i.application_id\nJOIN candidates c ON c.id = a.candidate_id\nWHERE c.name ILIKE $1\nORDER BY i.created_at DESC LIMIT 3;",
+        "options": {
+          "queryReplacement": "={{ [ '%' + ($json.candidate_name || '') + '%' ] }}"
+        }
+      },
+      "id": "5a75d0b1-fbd1-42eb-900f-b86b86462401",
+      "name": "[Copilot] Get Interview Feedback (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -144,
+        1588
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nreturn [{ json: { context: 'Interview feedback history:\\n' + JSON.stringify(rows), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "5099e186-011d-468f-875a-7964a6f40edb",
+      "name": "[Copilot] Build Context - Feedback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        1588
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { context: 'No specific database context matched \u2014 answer using general recruiting best practices.', question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "7113ef95-f4bf-4584-b2f0-8dc37f4227bc",
+      "name": "[Copilot] Build Context - General",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        1796
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.4, messages: [ { role: 'system', content: \"You are an AI Recruitment Copilot for a recruiter. Use the provided context when it is relevant. If the context says no specific data was found, answer helpfully anyway using your general recruiting knowledge. Be concise and specific. If generating interview questions, produce 5-8 numbered questions tailored to the candidate and job.\" }, { role: 'user', content: 'CONTEXT:\\n' + $json.context + '\\n\\nQUESTION: ' + $json.question } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "aeaff97d-47d4-4f2a-b501-88865dc8a7e8",
+      "name": "[Copilot] LLM - Grounded Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        1380
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "chat_logs",
+          "mode": "list",
+          "cachedResultName": "chat_logs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $('[Copilot] Parse Intent').first().json.recruiter_id }}",
+            "message": "={{ $('[Copilot] Parse Intent').first().json.message }}",
+            "intent": "={{ $('[Copilot] Parse Intent').first().json.intent }}",
+            "response": "={{ $json.choices[0].message.content }}",
+            "id": "={{ $json.id }}",
+            "created_at": "2026-08-09T21:46:26"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "intent",
+              "displayName": "intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "response",
+              "displayName": "response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "0edd3c3b-fb4d-49c8-9081-2e689d325346",
+      "name": "[Copilot] Log Chat (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        1380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, answer: $('[Copilot] LLM - Grounded Answer').item.json.choices[0].message.content } }}",
+        "options": {}
+      },
+      "id": "4b777672-2be0-467d-b3da-576a06b2d316",
+      "name": "[Copilot] Respond - Copilot Answer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udfe2 Start\nEvery message typed into the AI Chatbot arrives here.",
+        "height": 104,
+        "width": 300,
+        "color": 5
+      },
+      "id": "ab87e338-8103-4cc3-acd5-fd4a7f9d67ac",
+      "name": "[Copilot] Sticky Note 3570",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1472,
+        1188
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 AI figures out what's being asked\nWorks out if the recruiter wants to search candidates, understand a score, get interview questions, or something else.",
+        "height": 140,
+        "width": 300,
+        "color": 5
+      },
+      "id": "b71aaa24-f3a2-41ec-9b5a-18066bd06b37",
+      "name": "[Copilot] Sticky Note 1395",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1104,
+        1156
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd00 Send to the right branch\nOnly one of the branches below runs, based on what the AI decided above.",
+        "height": 124,
+        "width": 280,
+        "color": 5
+      },
+      "id": "fcd90a60-73d7-48c4-a392-3caa8d08e5f1",
+      "name": "[Copilot] Sticky Note 7090",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        1156
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd0d Search Candidates\nFinds the candidates that best match what was asked, using the search vectors.",
+        "height": 116,
+        "width": 260,
+        "color": 5
+      },
+      "id": "f718cab3-e830-4d9c-b734-73959e390411",
+      "name": "[Copilot] Sticky Note 5686",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        996
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udcca Explain a Score\nLooks up the candidate's saved AI score and explanation.",
+        "height": 116,
+        "width": 228,
+        "color": 5
+      },
+      "id": "effd0315-aff2-4b4b-88af-fae9d7cb2477",
+      "name": "[Copilot] Sticky Note 5432",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        1188
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udcdd Interview Questions\nPulls the candidate's resume and the job details so AI can write tailored questions.",
+        "height": 116,
+        "width": 244,
+        "color": 5
+      },
+      "id": "55142ad6-bdb8-4416-a2a9-b845000b14bd",
+      "name": "[Copilot] Sticky Note 2993",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        1348
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udcac Summarize Feedback\nGrabs the candidate's recent interview feedback.",
+        "height": 100,
+        "width": 244,
+        "color": 5
+      },
+      "id": "7d792d48-5944-46b7-9fc6-5785b7f313d0",
+      "name": "[Copilot] Sticky Note 4268",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        1524
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83c\udf10 General Question\nNo specific data needed \u2014 AI answers from general recruiting knowledge.",
+        "height": 128,
+        "width": 276,
+        "color": 5
+      },
+      "id": "26e3e765-a953-4b6c-b5df-820a56a0a3e0",
+      "name": "[Copilot] Sticky Note 5064",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 AI writes the final answer\nUses whatever information was gathered above to write a reply that sticks to real data.",
+        "height": 128,
+        "width": 280,
+        "color": 5
+      },
+      "id": "787f5a1c-93d4-4ab6-8681-754bfda5d976",
+      "name": "[Copilot] Sticky Note 6809",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\uddc4\ufe0f Save & reply\nLogs the question and answer, then sends the answer back to the chat window.",
+        "height": 124,
+        "width": 280,
+        "color": 5
+      },
+      "id": "979c7eec-1437-41b9-9b83-612dfe1ab78c",
+      "name": "[Copilot] Sticky Note 6433",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hiring-decision",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8be066b3-3c8e-4e91-8abe-1705e647ae55",
+      "name": "[Hiring] Interview Completed (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        2360
+      ],
+      "webhookId": "050b7841-8cc1-447c-bd03-c94ba004bbf4"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT i.*, a.id as application_id, a.job_id, a.candidate_id, a.score,\n       c.name as candidate_name, c.email as candidate_email, j.title as job_title\nFROM interviews i\nJOIN applications a ON a.id = i.application_id\nJOIN candidates c ON c.id = a.candidate_id\nJOIN jobs j ON j.id = a.job_id\nWHERE i.id = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $json.body.interview_id ] }}"
+        }
+      },
+      "id": "99f824ac-e24e-4e3d-96ae-a31b3a83432f",
+      "name": "[Hiring] Get Interview + Application Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1696,
+        2360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Analyze interviewer feedback text for sentiment and quality signal. Return ONLY JSON: { sentiment: \"positive\"|\"neutral\"|\"negative\", feedback_quality_score: number(0-100), key_strengths: array, key_concerns: array }.' }, { role: 'user', content: $json.feedback || 'No written feedback provided. Rating: ' + $json.rating } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "60c84010-ea54-4dd4-996c-f6567947f9d6",
+      "name": "[Hiring] LLM Sentiment & Quality Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1392,
+        2360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet s; try { s = JSON.parse(raw); } catch(e) { s = { sentiment:'neutral', feedback_quality_score:50, key_strengths:[], key_concerns:[] }; }\nconst iv = $('[Hiring] Get Interview + Application Data').first().json;\nconst sentimentBonus = s.sentiment === 'positive' ? 15 : s.sentiment === 'negative' ? -15 : 0;\nconst finalScore = Math.max(0, Math.min(100, Math.round(((iv.score || 50) * 0.5) + ((iv.rating || 3) * 20 * 0.3) + (s.feedback_quality_score * 0.2) + sentimentBonus)));\nreturn [{ json: { ...iv, sentiment_analysis: s, final_score: finalScore } }];"
+      },
+      "id": "760faa9f-c889-462a-aab6-174ca3b797fb",
+      "name": "[Hiring] Calculate Candidate Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        2360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.2, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Based on candidate score, sentiment analysis and interview feedback, recommend one of: \"hire\", \"review\", \"reject\". >=80 with positive sentiment => hire. 50-79 or mixed signals => review (needs human approval). <50 or negative => reject. Return ONLY JSON: { recommendation, reasoning }.' }, { role: 'user', content: JSON.stringify({ final_score: $json.final_score, sentiment_analysis: $json.sentiment_analysis, job_title: $json.job_title, candidate_name: $json.candidate_name }) } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "aae21116-3195-421f-b8e9-702f7092e7e0",
+      "name": "[Hiring] AI Hiring Recommendation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -800,
+        2360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet r; try { r = JSON.parse(raw); } catch(e) { r = { recommendation: 'review', reasoning: '' }; }\nconst data = $('[Hiring] Calculate Candidate Score').first().json;\nreturn [{ json: { ...data, recommendation: r.recommendation, reasoning: r.reasoning } }];"
+      },
+      "id": "f434914b-dfa2-4a35-a9bb-3cf4985f2968",
+      "name": "[Hiring] Merge Recommendation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        2360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.recommendation }}",
+                    "rightValue": "hire",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.recommendation }}",
+                    "rightValue": "review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.recommendation }}",
+                    "rightValue": "reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "364a4555-09ab-471a-9478-fa92916b458d",
+      "name": "[Hiring] Route by Recommendation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -256,
+        2344
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message": "={{ 'AI recommends REVIEW for ' + $json.candidate_name + ' (' + $json.job_title + '). Score: ' + $json.final_score + '. ' + $json.reasoning }}",
+            "type": "approval_required"
+          }
+        },
+        "options": {}
+      },
+      "id": "2d385357-648a-485b-ac11-821c2929cff7",
+      "name": "[Hiring] Notify Recruiter - Approval Needed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -80,
+        2040
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "78e88a40-3059-40e9-8479-5ad6e8d834d0",
+      "name": "[Hiring] Wait for Human Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        2040
+      ],
+      "webhookId": "e8cf3bb2-33d8-406b-b3fe-2945273af1d1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fd2d22f2-b8fe-4c44-b6be-9cae1a098fed",
+      "name": "[Hiring] Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        464,
+        2040
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "applications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "stage": "hired",
+            "score": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "job_id",
+              "displayName": "job_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "matched_skills",
+              "displayName": "matched_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "missing_skills",
+              "displayName": "missing_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "7531286b-26cd-4c17-b04c-4f19d88b2c8a",
+      "name": "[Hiring] Update Stage - Hired (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        2344
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.5, messages: [ { role: 'system', content: 'Write a warm, professional job offer letter/email body. Include role title, next steps, and an enthusiastic tone. No placeholders like [Company] left unresolved \u2014 use \"our team\".' }, { role: 'user', content: 'Candidate: ' + $json.candidate_name + '\\nRole: ' + $json.job_title } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "25773ad5-575f-4c57-9fbe-1b7fca57c886",
+      "name": "[Hiring] Generate Offer Letter (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        416,
+        2344
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('[Hiring] Get Interview + Application Data').first().json.candidate_email }}",
+        "subject": "={{ 'Job Offer - ' + $('[Hiring] Get Interview + Application Data').first().json.job_title }}",
+        "message": "={{ $json.choices[0].message.content }}",
+        "options": {}
+      },
+      "id": "1245040c-d745-4ba7-8e77-c0ce5078e45f",
+      "name": "[Hiring] Send Offer Email (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        576,
+        2344
+      ],
+      "webhookId": "ef45d61d-e77c-4012-8945-aabe7cc6dc93",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pK1jc03izMOWaUXH",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "content": "={{ $('[Hiring] Generate Offer Letter (LLM)').item.json.choices[0].message.content }}",
+            "id": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "content",
+              "displayName": "content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "metadata",
+              "displayName": "metadata",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "embedding",
+              "displayName": "embedding",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "f727fefc-f503-4065-b00e-539a255b6fdf",
+      "name": "[Hiring] Log Offer Document (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        736,
+        2344
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "applications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "stage": "rejected",
+            "score": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "job_id",
+              "displayName": "job_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "candidate_id",
+              "displayName": "candidate_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_summary",
+              "displayName": "ai_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "matched_skills",
+              "displayName": "matched_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "missing_skills",
+              "displayName": "missing_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "1f3a82e9-793c-4f2a-8833-9c42885e35d6",
+      "name": "[Hiring] Update Stage - Rejected (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        48,
+        2600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.5, messages: [ { role: 'system', content: 'Write a kind, respectful rejection email body. Encourage them to apply again in future. Keep it short.' }, { role: 'user', content: 'Candidate: ' + $json.candidate_name + '\\nRole: ' + $json.job_title } ] }) }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "id": "e8496aab-17a9-4540-827d-ebb3c9311130",
+      "name": "[Hiring] Generate Rejection Email (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        2600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
+          "name": "Mistral API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('[Hiring] Get Interview + Application Data').first().json.candidate_email }}",
+        "subject": "={{ 'Update on your application - ' + $('[Hiring] Get Interview + Application Data').first().json.job_title }}",
+        "message": "={{ $json.choices[0].message.content }}",
+        "options": {}
+      },
+      "id": "d9031cde-7fa1-402b-a0c3-569833f62407",
+      "name": "[Hiring] Send Rejection Email (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        2600
+      ],
+      "webhookId": "8529027c-fb82-4f33-a808-e1614c84a581",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pK1jc03izMOWaUXH",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "input1"
+      },
+      "id": "b9298eae-4a51-436c-b9a7-70c44e32ef57",
+      "name": "[Hiring] Merge All Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        960,
+        2360
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "notifications",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message": "={{ 'Hiring decision finalized for ' + $('[Hiring] Merge Recommendation').item.json.candidate_name + ': ' + $('[Hiring] Merge Recommendation').item.json.recommendation }}",
+            "type": "hiring_decision"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_read",
+              "displayName": "is_read",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "32410f3f-3179-4558-a81f-1706e07af0ee",
+      "name": "[Hiring] Create Notification (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1136,
+        2360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "audit_logs",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ 'hiring_decision:' + $('[Hiring] Merge Recommendation').item.json.recommendation }}",
+            "target_table": "applications",
+            "target_id": "={{ $('[Hiring] Merge Recommendation').item.json.application_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "d19cefe0-777a-4095-bd5e-0da0ae73457b",
+      "name": "[Hiring] Audit Log (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1376,
+        2360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, recommendation: $('[Hiring] Merge Recommendation').item.json.recommendation } }}",
+        "options": {}
+      },
+      "id": "607de356-fdde-4dfa-8b48-1a96c78ca6e0",
+      "name": "[Hiring] Respond - Decision Processed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        2360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udfe2 Start\nCalled once an interview is marked Completed with feedback.",
+        "height": 120,
+        "width": 280,
+        "color": 5
+      },
+      "id": "eaded952-e3bd-4c41-8421-f4e31fe00855",
+      "name": "[Hiring] Sticky Note 1951",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2080,
+        2216
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\uddc4\ufe0f Gather everything\nPulls the interview, application, candidate and job details in one go.",
+        "height": 124,
+        "width": 260,
+        "color": 5
+      },
+      "id": "eb68f174-be92-42fd-891a-ce4cba707761",
+      "name": "[Hiring] Sticky Note 1707",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1760,
+        2200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 AI reads the feedback\nChecks if the interviewer's written feedback is positive or negative, and how detailed it is.",
+        "height": 144,
+        "width": 260,
+        "color": 5
+      },
+      "id": "e8a52662-8a89-439f-8588-1cba0898fef3",
+      "name": "[Hiring] Sticky Note 4368",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1472,
+        2184
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\u2696\ufe0f Work out a final score\nCombines the application score, interview rating, and feedback quality into one number.",
+        "height": 156,
+        "width": 230,
+        "color": 5
+      },
+      "id": "bf003b6c-9a66-4887-957c-4f78762f295b",
+      "name": "[Hiring] Sticky Note 1620",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1168,
+        2168
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83e\udde0 AI suggests a decision\nBased on the final score, suggests hire, review, or reject \u2014 with reasons.",
+        "height": 128,
+        "width": 260,
+        "color": 5
+      },
+      "id": "c18d014c-17c5-4c0e-9b63-f718d6e943e2",
+      "name": "[Hiring] Sticky Note 2345",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        2168
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd00 Send to the right branch\nSends the candidate down the hire / review / reject path.",
+        "height": 132,
+        "color": 5
+      },
+      "id": "685df683-8a52-4b90-89e6-78f3c7b01b0a",
+      "name": "[Hiring] Sticky Note 6342",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        2168
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\udd10 Wait for a human\nFor borderline cases, pauses here and waits for a recruiter to approve or reject \u2014 AI never decides alone.",
+        "height": 116,
+        "width": 320,
+        "color": 5
+      },
+      "id": "72e534bb-784b-4687-ab22-b22f7684d302",
+      "name": "[Hiring] Sticky Note 5794",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        1912
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\u2705 Hire\nMarks the candidate as hired, AI writes an offer letter, and it's emailed automatically.",
+        "height": 112,
+        "width": 268,
+        "color": 5
+      },
+      "id": "a752ffa2-1911-4064-aa68-17c9a974bf6f",
+      "name": "[Hiring] Sticky Note 2711",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        2248
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\u274c Reject\nMarks the candidate as rejected, AI writes a polite rejection email, and it's emailed automatically.",
+        "height": 120,
+        "width": 280,
+        "color": 5
+      },
+      "id": "2f98b192-800e-404b-8bd9-aa3393308f36",
+      "name": "[Hiring] Sticky Note 6968",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        2776
+      ]
+    },
+    {
+      "parameters": {
+        "content": "\ud83d\uddc4\ufe0f Record what happened\nSaves a notification and an audit log entry so there's a full record of the decision.",
+        "height": 108,
+        "width": 320,
+        "color": 5
+      },
+      "id": "f12cba86-121d-4b18-b3c8-4f7e9c042fa5",
+      "name": "[Hiring] Sticky Note 2018",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        2536
+      ]
+    }
+  ],
+  "connections": {
+    "[Rerank] Evaluate Candidates (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Get Job Details (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Get Job Details (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Generate Job Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Generate Job Embedding": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Vector Search - Top 20 Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Vector Search - Top 20 Candidates": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Split Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Split Candidates": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] AI Candidate Evaluation (Skills/Exp/Projects)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Rerank] Sort & Take Top 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] AI Candidate Evaluation (Skills/Exp/Projects)": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Calculate Weighted Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Calculate Weighted Score": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Save Score - Every Candidate (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Loop Back": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Split Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Sort & Take Top 5": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] AI Reranker & Explanation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] AI Reranker & Explanation": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Attach Explanations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Attach Explanations": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Update Applications (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Update Applications (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Respond - Top 5 Ranked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Rerank] Save Score - Every Candidate (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Rerank] Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Copilot Chat (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Intent Classification (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Intent Classification (LLM)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Embed Question",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Get Candidate + Score (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Get Profile + Job (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Get Interview Feedback (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Build Context - General",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Embed Question": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Vector Search Candidates (RAG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Vector Search Candidates (RAG)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Get Candidate + Score (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Get Profile + Job (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Questions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Get Interview Feedback (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Search": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Score": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Questions": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Feedback": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - General": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] LLM - Grounded Answer": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Log Chat (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Log Chat (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Respond - Copilot Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Interview Completed (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Get Interview + Application Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Get Interview + Application Data": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] LLM Sentiment & Quality Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] LLM Sentiment & Quality Analysis": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Calculate Candidate Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Calculate Candidate Score": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] AI Hiring Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] AI Hiring Recommendation": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Merge Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Merge Recommendation": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Route by Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Route by Recommendation": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Update Stage - Hired (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Hiring] Notify Recruiter - Approval Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Hiring] Update Stage - Rejected (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Update Stage - Hired (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Generate Offer Letter (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Generate Offer Letter (LLM)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Send Offer Email (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Send Offer Email (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Log Offer Document (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Log Offer Document (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Merge All Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Notify Recruiter - Approval Needed": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Approved?": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Update Stage - Hired (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Hiring] Update Stage - Rejected (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Update Stage - Rejected (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Generate Rejection Email (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Generate Rejection Email (LLM)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Send Rejection Email (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Send Rejection Email (Gmail)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Merge All Branches",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "[Hiring] Merge All Branches": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Create Notification (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Create Notification (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Audit Log (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Hiring] Audit Log (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Hiring] Respond - Decision Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3130a79d-5b76-49ad-a9ad-c306cf164204",
+  "meta": {
+    "instanceId": "ai-recruitment-system"
+  },
+  "nodeGroups": [],
+  "id": "803b658f-54f6-4852-807b-cccfae54e26e",
+  "tags": []
+}
