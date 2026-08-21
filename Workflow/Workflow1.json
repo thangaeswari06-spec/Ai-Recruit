@@ -13,8 +13,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -576,
-        416
+        -656,
+        -16
       ],
       "webhookId": "878252f0-226d-4eda-b55f-3546f3db448b"
     },
@@ -75,8 +75,8 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -288,
-        416
+        -400,
+        -16
       ]
     },
     {
@@ -107,8 +107,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -64,
-        784
+        -48,
+        464
       ]
     },
     {
@@ -124,8 +124,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        256,
-        992
+        176,
+        944
       ]
     },
     {
@@ -139,8 +139,8 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        256,
-        704
+        176,
+        448
       ]
     },
     {
@@ -152,8 +152,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        576,
-        704
+        480,
+        448
       ]
     },
     {
@@ -183,8 +183,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        848,
-        528
+        704,
+        272
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -205,8 +205,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1072,
-        528
+        912,
+        272
       ]
     },
     {
@@ -220,8 +220,8 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [
-        1328,
-        672
+        1152,
+        432
       ]
     },
     {
@@ -326,8 +326,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1584,
-        672
+        1456,
+        432
       ],
       "credentials": {
         "postgres": {
@@ -347,8 +347,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        3472,
-        672
+        3424,
+        448
       ]
     },
     {
@@ -378,8 +378,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        976,
-        848
+        800,
+        560
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -420,8 +420,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2256,
-        672
+        2320,
+        432
       ]
     },
     {
@@ -438,7 +438,7 @@
       "typeVersion": 2.6,
       "position": [
         2496,
-        432
+        224
       ],
       "credentials": {
         "postgres": {
@@ -475,7 +475,7 @@
       "typeVersion": 4.2,
       "position": [
         2736,
-        432
+        224
       ],
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -500,7 +500,7 @@
       "typeVersion": 2,
       "position": [
         2960,
-        432
+        224
       ]
     },
     {
@@ -516,8 +516,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        3184,
-        432
+        3200,
+        224
       ],
       "credentials": {
         "postgres": {
@@ -539,8 +539,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1808,
-        672
+        1744,
+        432
       ],
       "credentials": {
         "postgres": {
@@ -563,7 +563,7 @@
       "typeVersion": 2.5,
       "position": [
         2048,
-        672
+        432
       ],
       "credentials": {
         "postgres": {
@@ -608,8 +608,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -64,
-        32
+        -80,
+        -416
       ]
     },
     {
@@ -625,8 +625,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        224,
-        192
+        272,
+        -256
       ]
     },
     {
@@ -656,8 +656,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        208,
-        -128
+        256,
+        -608
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -678,8 +678,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        576,
-        -128
+        464,
+        -608
       ]
     },
     {
@@ -709,8 +709,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        896,
-        -128
+        784,
+        -608
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -731,8 +731,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1232,
-        -128
+        1040,
+        -608
       ]
     },
     {
@@ -763,8 +763,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1680,
-        -128
+        1296,
+        -608
       ]
     },
     {
@@ -794,8 +794,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2064,
-        -32
+        1600,
+        -432
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -816,8 +816,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1760,
-        176
+        1840,
+        -432
       ]
     },
     {
@@ -949,8 +949,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2048,
-        -240
+        1600,
+        -752
       ],
       "credentials": {
         "postgres": {
@@ -970,8 +970,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        2416,
-        -240
+        1824,
+        -752
       ]
     },
     {
@@ -986,8 +986,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -864,
-        1488
+        -656,
+        2272
       ],
       "webhookId": "c5cc2203-71aa-44a1-9d6b-df73694a23ea"
     },
@@ -1018,8 +1018,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -352,
-        1680
+        80,
+        2608
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -1040,8 +1040,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        0,
-        1680
+        336,
+        2608
       ]
     },
     {
@@ -1143,8 +1143,8 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        400,
-        1632
+        816,
+        2560
       ]
     },
     {
@@ -1174,8 +1174,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        640,
-        1360
+        1248,
+        1504
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -1200,8 +1200,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        912,
-        1360
+        1456,
+        1504
       ],
       "credentials": {
         "postgres": {
@@ -1219,8 +1219,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1184,
-        1360
+        1664,
+        1504
       ]
     },
     {
@@ -1236,8 +1236,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        752,
-        1536
+        1344,
+        1856
       ],
       "credentials": {
         "postgres": {
@@ -1255,8 +1255,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1152,
-        1536
+        1616,
+        1856
       ]
     },
     {
@@ -1272,8 +1272,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        752,
-        1680
+        1344,
+        2256
       ],
       "credentials": {
         "postgres": {
@@ -1291,8 +1291,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1136,
-        1680
+        1600,
+        2256
       ]
     },
     {
@@ -1308,8 +1308,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        752,
-        1808
+        1328,
+        2640
       ],
       "credentials": {
         "postgres": {
@@ -1327,8 +1327,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1136,
-        1808
+        1568,
+        2640
       ]
     },
     {
@@ -1340,8 +1340,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        944,
-        2016
+        1472,
+        3056
       ]
     },
     {
@@ -1371,8 +1371,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1616,
-        1760
+        2112,
+        2640
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -1475,8 +1475,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1968,
-        1760
+        2432,
+        2640
       ],
       "credentials": {
         "postgres": {
@@ -1496,8 +1496,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        2240,
-        1760
+        2752,
+        2640
       ]
     },
     {
@@ -1530,8 +1530,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -592,
-        1488
+        -368,
+        2272
       ]
     },
     {
@@ -1545,25 +1545,471 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        -368,
-        1296
+        80,
+        1936
       ]
     },
     {
       "parameters": {
-        "content": "START ",
-        "height": 832,
-        "width": 1120,
+        "content": "## Job Creation & Resume Screening\n This workflow helps recruiters create job postings and process candidate resumes in one flow. It uses AI to generate and improve job descriptions, checks job quality, validates and extracts resume data, creates candidate profiles and embeddings, stores the data in Supabase, and evaluates candidates against the selected job to calculate a match score.\n\nIt accepts job details and resumes, validates the input, creates job descriptions using AI, processes resumes, and calculates candidate scores.\n\n## Key features:\n\nAI Job Creation\nJob Quality & Bias Check\nResume Processing\nCandidate Profile Creation\nCandidate Scoring\nSupabase Storage\n",
+        "height": 592,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1648,
+        -272
+      ],
+      "typeVersion": 1,
+      "id": "7c58c9b2-4d49-48e3-953c-286255b3a01a",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": " \n## 1. Recruiter Request & Routing\nThe Switch routes the input into the correct flow:\nJob → Job Creation\nResume → Resume Screening",
+        "height": 320,
+        "width": 512,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -736,
+        -176
+      ],
+      "typeVersion": 1,
+      "id": "16c40922-5cd1-4b95-a0b2-9710f3dd8114",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## 3. Resume Screening\nValidates and processes the resume, extracts candidate information, and creates a candidate profile.\nThe system then evaluates and saves the candidate score.",
+        "height": 1168,
+        "width": 3856,
         "color": 7
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        448,
-        400
+        -144,
+        -32
       ],
       "typeVersion": 1,
-      "id": "cd2d51fc-bbad-4853-b8b2-66ee12a634f6",
+      "id": "a9a14405-6da9-4136-bc1f-d639cc41624c",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## 2.1 Job Input & Validation\nChecks if the required job details are available.\nInvalid input → Error response.",
+        "height": 400,
+        "width": 224,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -112,
+        -656
+      ],
+      "typeVersion": 1,
+      "id": "6b5bbbef-dbc2-465e-aeb9-99e8e052919c",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## 2.2 AI Job Generation\nAI creates the job description, required skills and experience.\nThe output is converted into structured job data.",
+        "height": 368,
+        "width": 480,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        160,
+        -784
+      ],
+      "typeVersion": 1,
+      "id": "75166374-fb7f-493e-b59e-2f0ee0b008a0",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## 2.3 Job Quality Check\nChecks the job description for quality and possible bias.\nMakes sure the JD is clear and suitable before publishing.",
+        "height": 336,
+        "width": 512,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        688,
+        -752
+      ],
+      "typeVersion": 1,
+      "id": "d13b2e4e-1105-4212-8ba6-0420b3bdf86f",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## 2.4 Quality Decision\nChecks if the JD passed the quality check.\nYes → Publish \n No → Improve JD",
+        "height": 384,
+        "width": 272,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1232,
+        -800
+      ],
+      "typeVersion": 1,
+      "id": "585df3da-ee66-4b1d-ae0f-03dc3d35e9ee",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## 2.6 Improve Job Description\nImproves the JD based on quality issues.\nCombines the improved JD and sends it back for quality check.",
+        "height": 304,
+        "width": 496,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1536,
+        -544
+      ],
+      "typeVersion": 1,
+      "id": "ea4fbd64-9e7f-4a2d-a82b-3c5db544deb7",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## 2.5 Publish Approved Job\nSaves the approved job in Supabase and Sends a job published confirmation.",
+        "height": 304,
+        "width": 496,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1536,
+        -880
+      ],
+      "typeVersion": 1,
+      "id": "3daa6a2e-3d15-4898-bfae-87032d8012c1",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "## 2.7 Invalid Responds\nShows an error for invalid job details.",
+        "height": 272,
+        "width": 272,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        192,
+        -384
+      ],
+      "typeVersion": 1,
+      "id": "1df952e8-15c0-4f66-9390-81bbd132730d",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "content": "## 3.1 File Validation + PDF/Text Extraction\n\nValidates the resume and extracts the text from the PDF.\n",
+        "height": 352,
+        "width": 416,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -80,
+        272
+      ],
+      "typeVersion": 1,
+      "id": "5efe4015-3446-4ae7-9dd9-31aaa0185d49",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "content": "## 2.Job Creation\nValidates recruiter job details and uses AI to create a quality job description.\nThe approved job is then published to Supabase",
+        "height": 848,
+        "width": 2336,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -144,
+        -928
+      ],
+      "typeVersion": 1,
+      "id": "6ff234b2-e3a5-4ed6-807a-3fb4c3686de2",
       "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## 3.2 Candidate Profile Processing\n\nCleans the resume, extracts candidate details using AI, creates the resume embedding, and combines the profile with the embedding.",
+        "height": 624,
+        "width": 896,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        432,
+        128
+      ],
+      "typeVersion": 1,
+      "id": "ae4bf110-835d-4fb3-9869-8c78aa889cfc",
+      "name": "Sticky Note12"
+    },
+    {
+      "parameters": {
+        "content": "## 3.3 Supabase / PostgreSQL\n\nStores the candidate data, resume details, application, and scoring information in the database.",
+        "height": 432,
+        "width": 848,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1392,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "a6eb93de-0aad-451e-9501-d8202381123b",
+      "name": "Sticky Note13"
+    },
+    {
+      "parameters": {
+        "content": "## 3.4 Candidate Evaluation & Score Processing\nChecks the job ID, gets the job details, evaluates the candidate, calculates and saves the final score, then sends the resume processing result.",
+        "height": 624,
+        "width": 1328,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2288,
+        64
+      ],
+      "typeVersion": 1,
+      "id": "08f9c37b-d357-4584-b995-5d97c967d67a",
+      "name": "Sticky Note15"
+    },
+    {
+      "parameters": {
+        "content": "## 3.5 Respond – Invalid File  \nReturns an error if the uploaded resume is not a PDF.  ",
+        "height": 320,
+        "width": 224,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        144,
+        784
+      ],
+      "typeVersion": 1,
+      "id": "f1bb6002-591c-4b22-bc70-585c8a457801",
+      "name": "Sticky Note14"
+    },
+    {
+      "parameters": {
+        "content": "## Recruiter Copilot \n\nThis workflow provides an AI-powered chat assistant for recruiters to quickly get useful information about candidates and recruitment activities. The recruiter can ask questions in natural language, and the system identifies the required action and retrieves the relevant information.\n\nThe workflow can search for suitable candidates, explain candidate scores, generate interview questions based on candidate and job details, summarize interview feedback, and handle general recruitment questions. The required data is fetched from Supabase and given to the AI to generate a relevant response.\n\nThe system then logs the recruiter’s chat and returns the final answer through the Copilot response.\n\n## Key features:\n\nCandidate Search\nScore Explanation\nInterview Questions\nFeedback Summary\nGeneral Recruitment Queries",
+        "height": 656,
+        "width": 528
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1632,
+        1856
+      ],
+      "typeVersion": 1,
+      "id": "8b169a18-e7ef-4bc2-a585-57ed5d9d4c72",
+      "name": "Sticky Note16"
+    },
+    {
+      "parameters": {
+        "content": "## 4.1 Webhook & Routing\n\nReceives the recruiter input through the webhook and routes it to the appropriate Job Creation or Resume Screening workflow.",
+        "height": 384,
+        "width": 576,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -736,
+        2080
+      ],
+      "typeVersion": 1,
+      "id": "84843cf6-aba1-446f-ae55-b48692fb87b6",
+      "name": "Sticky Note17"
+    },
+    {
+      "parameters": {
+        "content": "## 4.2 Health Check\nChecks whether the Copilot service is active and returns a successful health status.",
+        "height": 336,
+        "width": 288,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -16,
+        1776
+      ],
+      "typeVersion": 1,
+      "id": "498b1bf0-194e-496f-ab94-16de2d8ffae2",
+      "name": "Sticky Note18"
+    },
+    {
+      "parameters": {
+        "content": "## 4.3 Intent Classification & Parsing\nUses AI to understand the recruiter’s question, identify the required action, and prepare the details for the next workflow step.",
+        "height": 400,
+        "width": 576,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -48,
+        2416
+      ],
+      "typeVersion": 1,
+      "id": "963367d0-f86c-4ab8-a6f0-78867d11e08e",
+      "name": "Sticky Note19"
+    },
+    {
+      "parameters": {
+        "content": "## 4.5 Candidate Search & Context Building\nConverts the recruiter’s query into an embedding, finds the most relevant candidates, and prepares their details as context for the AI response.",
+        "height": 352,
+        "width": 656,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        1360
+      ],
+      "typeVersion": 1,
+      "id": "eab2d37f-cdcd-47fe-8cc4-1494cdf52213",
+      "name": "Sticky Note20"
+    },
+    {
+      "parameters": {
+        "content": "## 4.4 Intent-Based Routing\n\nRoutes the recruiter’s request based on the identified intent.\n\nSearch Candidates → Candidate Search & RAG\nExplain Score → Candidate Score Details\nGenerate Questions → Interview Question Generation\nSummarize Feedback → Interview Feedback Summary\nGeneral → General Recruitment Response",
+        "height": 688,
+        "width": 400,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        624,
+        2160
+      ],
+      "typeVersion": 1,
+      "id": "e3aa2a18-47e3-4375-8601-4928b6838d15",
+      "name": "Sticky Note21"
+    },
+    {
+      "parameters": {
+        "content": "## 4.6 Candidate Score & Context\n\nRetrieves the candidate’s score details and prepares the information for the AI response.",
+        "height": 304,
+        "width": 656,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        1744
+      ],
+      "typeVersion": 1,
+      "id": "c222844a-f27f-4d72-82f5-d1f08f83c267",
+      "name": "Sticky Note22"
+    },
+    {
+      "parameters": {
+        "content": "## 4.7 Candidate Profile & Interview Context\n\nRetrieves the candidate and job details, then prepares the information for generating interview questions.",
+        "height": 336,
+        "width": 656,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        2112
+      ],
+      "typeVersion": 1,
+      "id": "050720e8-4df7-4075-a8da-45ee8cfcbc64",
+      "name": "Sticky Note23"
+    },
+    {
+      "parameters": {
+        "content": "## 4.8 Interview Feedback & Context\n\nRetrieves the candidate’s interview feedback and prepares it for generating a summary.",
+        "height": 304,
+        "width": 656,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        2512
+      ],
+      "typeVersion": 1,
+      "id": "7922472b-d262-4f34-a2b7-8a401552c95b",
+      "name": "Sticky Note24"
+    },
+    {
+      "parameters": {
+        "content": "## 4.9 General Context Building\n\nPrepares general recruitment context for handling queries that do not match a specific route.",
+        "height": 336,
+        "width": 656,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        2864
+      ],
+      "typeVersion": 1,
+      "id": "67166a47-23a1-4282-8d3d-f050166f35e7",
+      "name": "Sticky Note25"
+    },
+    {
+      "parameters": {
+        "content": "## 4.10  Generate, Log & Respond\nGenerates the AI response using the prepared context, saves the chat details, and sends the final answer back to the recruiter.",
+        "height": 400,
+        "width": 992,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2032,
+        2480
+      ],
+      "typeVersion": 1,
+      "id": "14f6d031-1d73-407a-953f-9bdee33cb3d8",
+      "name": "Sticky Note26"
+    },
+    {
+      "parameters": {
+        "content": "## 4. Recruiter Copilot\n\nHelps recruiters get quick answers and insights about candidates and recruitment activities.",
+        "height": 1920,
+        "width": 3920,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -816,
+        1328
+      ],
+      "typeVersion": 1,
+      "id": "e28a423c-fea4-459e-a311-e6f341c9c8af",
+      "name": "Sticky Note27"
+    },
+    {
+      "parameters": {
+        "content": "",
+        "height": 2272,
+        "width": 4704,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -816,
+        -1072
+      ],
+      "typeVersion": 1,
+      "id": "0240fe28-d56b-4db3-a3fa-6d50baf1d870",
+      "name": "Sticky Note28"
     }
   ],
   "pinData": {},
@@ -1601,12 +2047,12 @@
       "main": [
         [
           {
-            "node": "LLM Resume Parser",
+            "node": "Embedding",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Embedding",
+            "node": "LLM Resume Parser",
             "type": "main",
             "index": 0
           }
@@ -2123,7 +2569,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "9ec52f22-5586-4363-85b5-b603c55811af",
+  "versionId": "ab7d7cf0-4b43-4845-b690-2c5053a864d5",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "4738efd1a6815c78b2d2cb38ac9b1217adeb75828e01f45e7ffe5bf34d2f8a75"
