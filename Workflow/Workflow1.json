@@ -1,22 +1,576 @@
 {
-  "name": "Workflow 1 - AI Job Creation & Publishing",
+  "name": "Ai-Recruit Workflow",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "job-intelligence",
+        "path": "recruiter-intake",
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "171526ca-369e-4c66-8d85-66f2e4e096e7",
-      "name": "Create Job (Webhook)",
+      "id": "c1f5394d-9f6c-4468-bd30-8236afd8bad8",
+      "name": "Recruiter Intake (Webhook)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -608,
-        368
+        -576,
+        416
       ],
-      "webhookId": "d4fbecd3-5bc6-4c62-8dac-7162c5a64c7a"
+      "webhookId": "878252f0-226d-4eda-b55f-3546f3db448b"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $binary.resume ? 'resume' : 'job' }}",
+                    "rightValue": "job",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $binary.resume ? 'resume' : 'job' }}",
+                    "rightValue": "resume",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "0"
+        }
+      },
+      "id": "5cfe6aa0-ca75-4c59-b3a7-962776a8264b",
+      "name": "Route: Job or Resume",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -288,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $binary.resume.fileExtension }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "3feb6002-9899-4a0d-965f-0839931df4cc",
+      "name": "File Validation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Only PDF resumes are supported' } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "d3a9c15c-469e-4e3f-9549-54e11be5bc92",
+      "name": "Respond - Invalid File",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        256,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "resume",
+        "options": {}
+      },
+      "id": "eb52eb6b-0ec9-4a83-9b0c-e3861c33168f",
+      "name": "PDF/Text Extraction",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        256,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($json.text || '').replace(/\\s+/g, ' ').replace(/\\u0000/g, '').trim();\nconst webhookData = $('Recruiter Intake (Webhook)').first().json.body || {};\nreturn [{ json: {\n  resume_text: text.slice(0, 15000),\n  name: webhookData.candidate_name || webhookData.name || '',\n  email: webhookData.candidate_email || webhookData.email || '',\n  phone: webhookData.candidate_phone || webhookData.phone || '',\n  location: webhookData.location || '',\n  job_id: webhookData.job_id || null,\n  resume_url: webhookData.resume_url || ''\n} }];"
+      },
+      "id": "ba0d5554-58dc-4d2c-9cde-28516066e990",
+      "name": "Document Cleaning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-small-latest', temperature: 0.2, max_tokens: 600, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Extract a structured candidate profile from the resume text. Return ONLY JSON with keys: skills (array), experience_years (number), experience (array of {company, title, duration}), education (array of {degree, institution, year}), projects (array of strings), certifications (array of strings), achievements (array of strings), summary (string).' }, { role: 'user', content: $json.resume_text } ] }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "0496e1ad-e066-44e6-a28c-6e29e150f06f",
+      "name": "LLM Resume Parser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        848,
+        528
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet p; try { p = JSON.parse(raw); } catch(e) { p = { skills: [], experience_years: 0 }; }\nconst base = $('Document Cleaning').first().json;\nreturn [{ json: { ...base, profile: p } }];"
+      },
+      "id": "de3a6980-93b9-470c-b49e-10440a39b360",
+      "name": "Structured Candidate Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "18cd1ccc-6feb-48d0-837f-5a1a8d1fcd47",
+      "name": "Merge Profile + Embedding",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1328,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "candidates",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.name }}",
+            "email": "={{ $json.email }}",
+            "phone": "={{ $json.phone }}",
+            "location": "={{ $json.location }}",
+            "resume_url": "={{ $json.resume_url }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resume_url",
+              "displayName": "resume_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d8ab6e93-2136-4950-b631-64b4dfdbf7fb",
+      "name": "Vector DB - Insert Candidate (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1584,
+        672
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, application: $json } }}",
+        "options": {}
+      },
+      "id": "0826e17b-333c-47d5-8bc5-18803f2d8b51",
+      "name": "Respond - Resume Processed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        3472,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-embed', input: $json.resume_text }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "2574a310-73fe-4c83-a258-bc747129701b",
+      "name": "Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        976,
+        848
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Document Cleaning').item.json.job_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "214b3d32-d3b1-4459-80b5-64575f713622",
+      "name": "Has Job ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2256,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, title, skills, description FROM jobs WHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $('Document Cleaning').item.json.job_id ] }}"
+        }
+      },
+      "id": "adfba9a7-139e-4f7e-a993-aa81ceb79346",
+      "name": "Get Job For Scoring (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2496,
+        432
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-small-latest', temperature: 0, max_tokens: 400, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Score this candidate against the job on 3 dimensions (0-100 each): skills_score, experience_score, projects_score. Also return matched_skills (array) and missing_skills (array) vs the job requirements. Return ONLY JSON.' }, { role: 'user', content: 'JOB: ' + $('Get Job For Scoring (Supabase)').first().json.title + ' | Required skills: ' + ($('Get Job For Scoring (Supabase)').first().json.skills || []).join(', ') + ' | JD: ' + $('Get Job For Scoring (Supabase)').first().json.description + '\\n\\nCANDIDATE RESUME:\\n' + $('Document Cleaning').first().json.resume_text } ] }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "33514aa2-9080-4ae0-bb39-d071fcb831d2",
+      "name": "AI Candidate Evaluation (Inline)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2736,
+        432
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet s;\ntry {\n  const raw = input.choices[0].message.content;\n  s = JSON.parse(raw);\n} catch (e) {\n  s = {};\n}\n// Guard: malformed/missing AI fields fall back to 0 instead of NaN -> NULL\nconst skills = Number(s.skills_score) || 0;\nconst experience = Number(s.experience_score) || 0;\nconst projects = Number(s.projects_score) || 0;\nconst weighted = Math.round((skills*0.4) + (experience*0.35) + (projects*0.25));\nconst recommendation = weighted >= 80 ? 'Shortlist Recommended' : weighted >= 60 ? 'Review Required' : 'Not Recommended';\nconst application = $('Insert Application (Raw SQL)').first().json;\nreturn [{ json: {\n  application_id: application.id,\n  weighted_score: weighted,\n  ai_summary: `Skills: ${skills} | Experience: ${experience} | Projects: ${projects} | Recommendation: ${recommendation}`,\n  matched_skills: s.matched_skills || [],\n  missing_skills: s.missing_skills || []\n} }];"
+      },
+      "id": "2e06518f-fc11-4e35-9cc5-f96e3bf828e5",
+      "name": "Calculate Weighted Score (Inline)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE applications SET score = $1, ai_summary = $2, matched_skills = $3, missing_skills = $4\nWHERE id = $5\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ $json.weighted_score, $json.ai_summary, $json.matched_skills, $json.missing_skills, $json.application_id ] }}"
+        }
+      },
+      "id": "7e93bf37-8ca2-4f82-9af3-44142be9ec17",
+      "name": "Save Score (Application)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3184,
+        432
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE candidates SET resume_text = $1, embedding = $2::vector\nWHERE id = $3;",
+        "options": {
+          "queryReplacement": "={{ [ $('Merge Profile + Embedding').item.json.resume_text, JSON.stringify($('Embedding').item.json.data[0].embedding), $('Vector DB - Insert Candidate (Supabase)').item.json.id ] }}"
+        }
+      },
+      "id": "96c1ec83-5b32-4b49-aaae-460d37c7954e",
+      "name": "Update Candidate Resume+Embedding",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1808,
+        672
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO applications (job_id, candidate_id, stage, matched_skills)\nVALUES ($1, $2, 'applied', $3)\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ $('Document Cleaning').item.json.job_id, $('Vector DB - Insert Candidate (Supabase)').item.json.id, $('Structured Candidate Profile').item.json.profile.skills ] }}"
+        }
+      },
+      "id": "6cc540ab-36f4-4def-af4a-724c6646dfef",
+      "name": "Insert Application (Raw SQL)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2048,
+        672
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
     },
     {
       "parameters": {
@@ -49,13 +603,13 @@
         },
         "options": {}
       },
-      "id": "06c41cba-f002-4f89-91e5-0630152b36e0",
+      "id": "b94624ca-3a4f-4a0b-8a24-1781056dde70",
       "name": "Validate Job Input",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -320,
-        368
+        -64,
+        32
       ]
     },
     {
@@ -66,19 +620,21 @@
           "responseCode": 400
         }
       },
-      "id": "dc0b6da3-3b46-4408-8cd9-1675a2e58787",
+      "id": "6433df81-cbde-4073-9f5f-bfde8fd1a7df",
       "name": "Respond - Invalid Input",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        -48,
-        544
+        224,
+        192
       ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -90,43 +646,48 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.4, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are an expert technical recruiter. Given a job title, department, location and experience level, produce a complete job posting. Return ONLY valid JSON with keys: description (string, full JD in markdown), skills (array of strings), experience_level (string), summary (string, 1 line).' }, { role: 'user', content: 'Title: ' + $json.body.title + '\\nDepartment: ' + $json.body.department + '\\nLocation: ' + ($json.body.location || 'Not specified') + '\\nExperience Level: ' + ($json.body.experience_level || 'Not specified') + '\\nExtra notes: ' + ($json.body.notes || 'None') } ] }) }}",
-        "options": {},
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpHeaderAuth"
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-small-latest', temperature: 0.4, max_tokens: 700, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are an expert technical recruiter. Given a job title, department, location and experience level, produce a complete job posting. Return ONLY valid JSON with keys: description (string, full JD in markdown), skills (array of strings), experience_level (string), summary (string, 1 line).' }, { role: 'user', content: 'Title: ' + $json.body.title + '\\nDepartment: ' + $json.body.department + '\\nLocation: ' + ($json.body.location || 'Not specified') + '\\nExperience Level: ' + ($json.body.experience_level || 'Not specified') + '\\nExtra notes: ' + ($json.body.notes || 'None') } ] }) }}",
+        "options": {
+          "timeout": 15000
+        }
       },
-      "id": "66642cd9-13e9-4770-ad8e-f31a4c0383c5",
+      "id": "f12e9b8a-b22f-450e-8f94-dbb07a3ed9a3",
       "name": "AI Agent - Generate JD + Skills + Experience",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -32,
-        288
+        208,
+        -128
       ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
-          "name": "Mistral API"
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet parsed;\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = { description: raw, skills: [], experience_level: '' }; }\nconst input = $('Create Job (Webhook)').first().json.body;\nreturn [{ json: {\n  title: input.title,\n  department: input.department,\n  location: input.location || '',\n  experience_level: parsed.experience_level || input.experience_level || '',\n  skills: parsed.skills || [],\n  description: parsed.description || '',\n  created_by: input.created_by || null\n} }];"
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet parsed;\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = { description: raw, skills: [], experience_level: '' }; }\nconst input = $('Recruiter Intake (Webhook)').first().json.body;\nreturn [{ json: {\n  title: input.title,\n  department: input.department,\n  location: input.location || '',\n  experience_level: parsed.experience_level || input.experience_level || '',\n  skills: parsed.skills || [],\n  description: parsed.description || '',\n  created_by: input.created_by || null\n} }];"
       },
-      "id": "4d8dec84-24cc-4fd5-9dea-a2cfd12820f4",
+      "id": "4caee8af-4154-4e82-a7f0-80de6282770e",
       "name": "Parse JD/Skills/Experience",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        240,
-        288
+        576,
+        -128
       ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -138,37 +699,40 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are a DEI and job-quality auditor. Review the job description for biased/exclusionary language, unrealistic requirements and clarity. Return ONLY JSON: { \"pass\": boolean, \"quality_score\": number (0-100), \"issues\": array of strings, \"suggestions\": string }. pass=true only if quality_score >= 75 and no bias issues.' }, { role: 'user', content: JSON.stringify($json) } ] }) }}",
-        "options": {},
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpHeaderAuth"
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-small-latest', temperature: 0, max_tokens: 400, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are a DEI and job-quality auditor. Review the job description for biased/exclusionary language, unrealistic requirements and clarity. Return ONLY JSON: { \"pass\": boolean, \"quality_score\": number (0-100), \"issues\": array of strings, \"suggestions\": string }. pass=true only if quality_score >= 75 and no bias issues.' }, { role: 'user', content: JSON.stringify($json) } ] }) }}",
+        "options": {
+          "timeout": 15000
+        }
       },
-      "id": "8708fb41-751e-4be8-9c7e-a5e20a2eb246",
+      "id": "e145485f-a879-40fa-bc3a-41426325eedb",
       "name": "AI Bias & Quality Check",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        512,
-        288
+        896,
+        -128
       ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
-          "name": "Mistral API"
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet review; try { review = JSON.parse(raw); } catch(e) { review = { pass: true, quality_score: 100, issues: [], suggestions: '' }; }\nconst job = $('Parse JD/Skills/Experience').first().json;\nreturn [{ json: { ...job, review } }];"
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet review; try { review = JSON.parse(raw); } catch(e) { review = { pass: true, quality_score: 100, issues: [], suggestions: '' }; }\nconst job = $('Parse JD/Skills/Experience').first().json;\nconst prevAttempts = $json.attempts || 0;\nconst attempts = prevAttempts; // count of improve-cycles already done coming INTO this check\nreturn [{ json: { ...job, review, attempts } }];"
       },
-      "id": "48860c28-7306-466c-bb22-613e98aba404",
+      "id": "768716d3-a94a-4c1b-b5fc-276c597e728d",
       "name": "Parse Quality Check",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        704,
-        288
+        1232,
+        -128
       ]
     },
     {
@@ -182,7 +746,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.review.pass }}",
+              "leftValue": "={{ $json.review.pass || $json.attempts >= 2 }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -194,19 +758,21 @@
         },
         "options": {}
       },
-      "id": "bff79403-cc0f-473e-bab4-8bae149381b2",
+      "id": "d047ef17-6de7-4026-bbca-89399758053c",
       "name": "Quality Passed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        912,
-        288
+        1680,
+        -128
       ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -218,37 +784,40 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.3, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Rewrite the job description fixing the listed issues. Return ONLY JSON with keys: description, skills (array), experience_level.' }, { role: 'user', content: 'Original: ' + $json.description + '\\nIssues to fix: ' + JSON.stringify($json.review.issues) + '\\nSuggestions: ' + $json.review.suggestions } ] }) }}",
-        "options": {},
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpHeaderAuth"
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-small-latest', temperature: 0.3, max_tokens: 700, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Rewrite the job description fixing the listed issues. Return ONLY JSON with keys: description, skills (array), experience_level.' }, { role: 'user', content: 'Original: ' + $json.description + '\\nIssues to fix: ' + JSON.stringify($json.review.issues) + '\\nSuggestions: ' + $json.review.suggestions } ] }) }}",
+        "options": {
+          "timeout": 15000
+        }
       },
-      "id": "77ad9e87-3ba2-4e9f-9ddb-25e96dfac2f3",
+      "id": "8a7411cc-a7c3-4cbf-8859-59d5f8daa944",
       "name": "AI Improve JD",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        944,
-        560
+        2064,
+        -32
       ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_YOUR_MISTRAL_CREDENTIAL_ID",
-          "name": "Mistral API"
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet parsed; try { parsed = JSON.parse(raw); } catch(e) { parsed = {}; }\nconst job = $('Parse Quality Check').first().json;\nreturn [{ json: { ...job, description: parsed.description || job.description, skills: parsed.skills || job.skills, experience_level: parsed.experience_level || job.experience_level } }];"
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet parsed; try { parsed = JSON.parse(raw); } catch(e) { parsed = {}; }\nconst job = $('Parse Quality Check').first().json;\nreturn [{ json: { ...job, description: parsed.description || job.description, skills: parsed.skills || job.skills, experience_level: parsed.experience_level || job.experience_level, attempts: (job.attempts || 0) + 1 } }];"
       },
-      "id": "8be1e88a-288e-433a-8234-01da03f6f73f",
+      "id": "6422eff2-8f70-4dbf-9a73-360e03f30df3",
       "name": "Merge Improved JD",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        672,
-        464
+        1760,
+        176
       ]
     },
     {
@@ -375,13 +944,13 @@
         },
         "options": {}
       },
-      "id": "b19cedbd-0e60-47dc-8883-98d796f79f6c",
+      "id": "a2db7c2a-d502-426b-97a4-6997c0c035c0",
       "name": "Publish Job (Supabase)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1232,
-        272
+        2048,
+        -240
       ],
       "credentials": {
         "postgres": {
@@ -396,166 +965,787 @@
         "responseBody": "={{ { success: true, job: $json } }}",
         "options": {}
       },
-      "id": "c033af21-cbc1-4403-8578-9e778a766498",
+      "id": "84598fb3-7527-4d53-b39f-4a08199cc17c",
       "name": "Respond - Job Published",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1520,
-        272
+        2416,
+        -240
       ]
     },
     {
       "parameters": {
-        "content": "\ud83d\udfe2 Start\nThe 'Create Job' form sends the job details here (title, department, location, etc.) to kick off the AI pipeline.",
-        "height": 140,
-        "width": 260,
-        "color": 5
+        "httpMethod": "POST",
+        "path": "copilot-chat",
+        "responseMode": "responseNode",
+        "options": {}
       },
-      "id": "72483b34-f9cd-4299-8bdc-3a91c75b3e72",
-      "name": "Sticky Note 7250",
-      "type": "n8n-nodes-base.stickyNote",
+      "id": "13671ada-9c32-494e-86b0-ddcdcafa8f49",
+      "name": "[Copilot] Copilot Chat (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        1488
+      ],
+      "webhookId": "c5cc2203-71aa-44a1-9d6b-df73694a23ea"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-small-latest', temperature: 0, max_tokens: 200, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Classify the recruiter question into exactly one intent: \"search_candidates\", \"explain_score\", \"generate_questions\", \"summarize_feedback\", or \"general\". Also extract any job title, candidate name, or IDs mentioned. Return ONLY JSON: { intent, job_title, candidate_name, candidate_id, job_id }.' }, { role: 'user', content: $json.body.message } ] }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "8dcbe28c-cf4d-42c2-b8a3-dd21f455eced",
+      "name": "[Copilot] Intent Classification (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -352,
+        1680
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nlet intent; try { intent = JSON.parse(raw); } catch(e) { intent = { intent: 'general' }; }\nconst body = $('[Copilot] Copilot Chat (Webhook)').first().json.body;\nreturn [{ json: { ...intent, message: body.message, recruiter_id: body.recruiter_id || null } }];"
+      },
+      "id": "f7df8d82-be99-4045-9df7-615cecdd8676",
+      "name": "[Copilot] Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "search_candidates",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "explain_score",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "generate_questions",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "summarize_feedback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "7b3788d1-3971-42a9-93b2-6a307508fd34",
+      "name": "[Copilot] Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        400,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-embed', input: $json.job_title || $json.message }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e697e72c-e544-42f8-9c65-f1d23830a9c6",
+      "name": "[Copilot] Embed Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        1360
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, c.email, a.score, a.matched_skills, a.missing_skills, a.stage\nFROM candidates c JOIN applications a ON a.candidate_id = c.id\nORDER BY c.embedding <=> $1::vector LIMIT 5;",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.data[0].embedding) ] }}"
+        }
+      },
+      "id": "a808c72e-8bc1-424d-b0ef-59926f390039",
+      "name": "[Copilot] Vector Search Candidates (RAG)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        912,
+        1360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nreturn [{ json: { context: 'Top matching candidates:\\n' + JSON.stringify(rows), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "108390fe-a8ff-48b1-939e-862683e26b4a",
+      "name": "[Copilot] Build Context - Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, a.score, a.ai_summary, a.matched_skills, a.missing_skills, a.ai_explanation\nFROM candidates c JOIN applications a ON a.candidate_id = c.id\nWHERE c.name ILIKE $1 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ '%' + ($json.candidate_name || '') + '%' ] }}"
+        }
+      },
+      "id": "eb06e9f6-4ca8-41e0-afea-2fabb3d58ce0",
+      "name": "[Copilot] Get Candidate + Score (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        752,
+        1536
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first()?.json || {};\nreturn [{ json: { context: 'Candidate score data:\\n' + JSON.stringify(row), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "aff91afe-7649-4987-a199-905ae66d930a",
+      "name": "[Copilot] Build Context - Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        1536
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, c.resume_text, j.title, j.description, j.skills\nFROM candidates c\nJOIN applications a ON a.candidate_id = c.id\nJOIN jobs j ON j.id = a.job_id\nWHERE c.name ILIKE $1 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ '%' + ($json.candidate_name || '') + '%' ] }}"
+        }
+      },
+      "id": "5fb49f94-f2e9-4b05-8ccd-3443c20d33a9",
+      "name": "[Copilot] Get Profile + Job (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        752,
+        1680
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first()?.json || {};\nreturn [{ json: { context: 'Candidate + job for interview questions:\\n' + JSON.stringify(row), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "00dec9bf-8c13-4ea0-9ae2-9c3dd58c3208",
+      "name": "[Copilot] Build Context - Questions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, i.feedback, i.rating, i.recommendation\nFROM interviews i\nJOIN applications a ON a.id = i.application_id\nJOIN candidates c ON c.id = a.candidate_id\nWHERE c.name ILIKE $1\nORDER BY i.created_at DESC LIMIT 3;",
+        "options": {
+          "queryReplacement": "={{ [ '%' + ($json.candidate_name || '') + '%' ] }}"
+        }
+      },
+      "id": "d5ca9317-40a1-43b5-a6df-d2fa0290bf25",
+      "name": "[Copilot] Get Interview Feedback (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        752,
+        1808
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nreturn [{ json: { context: 'Interview feedback history:\\n' + JSON.stringify(rows), question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "92a3946d-cc09-4bbc-9bb5-4a9cf77bd5f1",
+      "name": "[Copilot] Build Context - Feedback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        1808
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { context: 'No specific database context matched — answer using general recruiting best practices.', question: $('[Copilot] Parse Intent').first().json.message } }];"
+      },
+      "id": "a2fb0da5-16f2-40ee-8ddb-3b6e494f00fc",
+      "name": "[Copilot] Build Context - General",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        2016
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-small-latest', temperature: 0.4, max_tokens: 500, messages: [ { role: 'system', content: \"You are an AI Recruitment Copilot for a recruiter. Use the provided context when it is relevant. If the context says no specific data was found, answer helpfully anyway using your general recruiting knowledge. Be concise and specific. FORMATTING RULES (always follow, the output is shown as plain text, not markdown): Never use asterisks, underscores, hashes, or any markdown symbols for bold, italic, or headings. Never wrap sentences or questions in quote marks. When generating interview questions, output ONLY a numbered list from 1 to 8 (5-8 questions). Each item MUST start with the number, a period, then a space, then the full question on that SAME line (example: '1. Tell me about a time you debugged a tricky issue.'). Never put the number alone on its own line. Leave one blank line between each numbered item. Do not add a category label, bonus question, or any text before or after the numbered list. Keep each question to a single sentence.\" }, { role: 'user', content: 'CONTEXT:\\n' + $json.context + '\\n\\nQUESTION: ' + $json.question } ] }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "36026a24-a284-4de2-a097-4fff500b9bce",
+      "name": "[Copilot] LLM - Grounded Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        1760
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4KQr7KPitPpuukXh",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "chat_logs",
+          "mode": "list",
+          "cachedResultName": "chat_logs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $('[Copilot] Parse Intent').first().json.recruiter_id }}",
+            "message": "={{ $('[Copilot] Parse Intent').first().json.message }}",
+            "intent": "={{ $('[Copilot] Parse Intent').first().json.intent }}",
+            "response": "={{ $json.choices[0].message.content }}",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "intent",
+              "displayName": "intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "response",
+              "displayName": "response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ed733994-84eb-447a-8d64-0240a2b44bc9",
+      "name": "[Copilot] Log Chat (Supabase)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1968,
+        1760
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HpcLFVORN8Z5fvvr",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, reply: $('[Copilot] LLM - Grounded Answer').item.json.choices[0].message.content, intent: $('[Copilot] Parse Intent').item.json.intent, timestamp: $now.toISO() } }}",
+        "options": {}
+      },
+      "id": "8a559fc9-c9f8-4105-afb8-a130d76525ef",
+      "name": "[Copilot] Respond - Copilot Answer",
+      "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        -688,
-        176
+        2240,
+        1760
       ]
     },
     {
       "parameters": {
-        "content": "\u2705 Check Input\nMakes sure title and department are filled in. If not, stops here with an error \u2014 saves an AI call.",
-        "height": 124,
-        "width": 280,
-        "color": 5
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "healthcheck-cond-1",
+              "leftValue": "={{ $json.body.__status_check }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "07a24596-451f-402f-83ea-4fc1ae2cfa8b",
-      "name": "Sticky Note 1981",
-      "type": "n8n-nodes-base.stickyNote",
+      "id": "1b071c41-29ad-4461-ae14-aafc57494978",
+      "name": "[Copilot] Is Health Check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status_check: true, timestamp: $now.toISO() } }}",
+        "options": {}
+      },
+      "id": "2f969fc6-f1e6-42bb-a57e-9c3e72541fda",
+      "name": "[Copilot] Respond - Health Check OK",
+      "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
         -368,
-        176
+        1296
       ]
     },
     {
       "parameters": {
-        "content": "\ud83e\udde0 AI writes the job post\nSends the job details to Mistral AI, which writes the full description, required skills, and experience level.",
-        "height": 128,
-        "width": 328,
-        "color": 5
+        "content": "START ",
+        "height": 832,
+        "width": 1120,
+        "color": 7
       },
-      "id": "be478ad1-24c8-4bbc-a8f9-9f0d689ef132",
-      "name": "Sticky Note 1853",
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        -80,
-        96
-      ]
-    },
-    {
-      "parameters": {
-        "content": "\ud83e\uddf9 Clean the AI's answer\nTakes the AI's reply and merges it with the original form data so it's ready to save.",
-        "height": 124,
-        "width": 260,
-        "color": 5
-      },
-      "id": "b47f1a06-6180-4053-bb2e-bcc28b82ffa6",
-      "name": "Sticky Note 4315",
-      "type": "n8n-nodes-base.stickyNote",
+        448,
+        400
+      ],
       "typeVersion": 1,
-      "position": [
-        160,
-        448
-      ]
-    },
-    {
-      "parameters": {
-        "content": "\ud83d\udd0d AI checks its own work\nA second Mistral AI call reviews the job post for bias or quality issues and gives a pass/fail score.",
-        "height": 128,
-        "width": 340,
-        "color": 5
-      },
-      "id": "1b4c0776-a190-48a3-a2c3-e99119329fdb",
-      "name": "Sticky Note 6067",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        368,
-        80
-      ]
-    },
-    {
-      "parameters": {
-        "content": "\ud83d\udd01 Pass or fix?\nIf the check failed, the job post gets rewritten. If it passed, it moves on to publish.",
-        "height": 138,
-        "width": 300,
-        "color": 5
-      },
-      "id": "4c201793-ac67-471c-8f53-eab9a7d8af5c",
-      "name": "Sticky Note 5980",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        816,
-        112
-      ]
-    },
-    {
-      "parameters": {
-        "content": "\u267b\ufe0f AI rewrites the job post\nFixes the issues found in the check, then sends it back to be checked again.",
-        "height": 124,
-        "width": 300,
-        "color": 5
-      },
-      "id": "8c7b21db-e8b8-411f-a434-81444cd4c4a2",
-      "name": "Sticky Note 9580",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1120,
-        544
-      ]
-    },
-    {
-      "parameters": {
-        "content": "\ud83d\uddc4\ufe0f Save the job\nInserts the finished job post into the `jobs` table in Supabase.",
-        "height": 96,
-        "width": 300,
-        "color": 5
-      },
-      "id": "53ced720-5879-447c-b816-3faffc092668",
-      "name": "Sticky Note 3680",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1152,
-        128
-      ]
-    },
-    {
-      "parameters": {
-        "content": "\ud83d\udce4 Send result back\nSends the finished job post back to the website so it can show the recruiter.",
-        "height": 120,
-        "width": 260,
-        "color": 5
-      },
-      "id": "8e914aba-623c-4c1e-bc5c-4d7c37262925",
-      "name": "Sticky Note 2154",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1504,
-        112
-      ]
+      "id": "cd2d51fc-bbad-4853-b8b2-66ee12a634f6",
+      "name": "Sticky Note"
     }
   ],
+  "pinData": {},
   "connections": {
-    "Create Job (Webhook)": {
+    "File Validation": {
       "main": [
         [
           {
-            "node": "Validate Job Input",
+            "node": "PDF/Text Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Invalid File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF/Text Extraction": {
+      "main": [
+        [
+          {
+            "node": "Document Cleaning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Cleaning": {
+      "main": [
+        [
+          {
+            "node": "LLM Resume Parser",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Resume Parser": {
+      "main": [
+        [
+          {
+            "node": "Structured Candidate Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Candidate Profile": {
+      "main": [
+        [
+          {
+            "node": "Merge Profile + Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Profile + Embedding": {
+      "main": [
+        [
+          {
+            "node": "Vector DB - Insert Candidate (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector DB - Insert Candidate (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "Update Candidate Resume+Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge Profile + Embedding",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Has Job ID?": {
+      "main": [
+        [
+          {
+            "node": "Get Job For Scoring (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Resume Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Job For Scoring (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "AI Candidate Evaluation (Inline)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Candidate Evaluation (Inline)": {
+      "main": [
+        [
+          {
+            "node": "Calculate Weighted Score (Inline)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Weighted Score (Inline)": {
+      "main": [
+        [
+          {
+            "node": "Save Score (Application)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Score (Application)": {
+      "main": [
+        [
+          {
+            "node": "Respond - Resume Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Application (Raw SQL)": {
+      "main": [
+        [
+          {
+            "node": "Has Job ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Candidate Resume+Embedding": {
+      "main": [
+        [
+          {
+            "node": "Insert Application (Raw SQL)",
             "type": "main",
             "index": 0
           }
@@ -674,20 +1864,271 @@
           }
         ]
       ]
+    },
+    "Recruiter Intake (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Route: Job or Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Job or Resume": {
+      "main": [
+        [
+          {
+            "node": "Validate Job Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "File Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Copilot Chat (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Is Health Check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Intent Classification (LLM)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Embed Question",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Get Candidate + Score (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Get Profile + Job (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Get Interview Feedback (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Build Context - General",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Embed Question": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Vector Search Candidates (RAG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Vector Search Candidates (RAG)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Search": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Get Candidate + Score (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Score": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Get Profile + Job (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Questions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Questions": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Get Interview Feedback (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Build Context - Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - Feedback": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Build Context - General": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] LLM - Grounded Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] LLM - Grounded Answer": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Log Chat (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Log Chat (Supabase)": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Respond - Copilot Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[Copilot] Is Health Check?": {
+      "main": [
+        [
+          {
+            "node": "[Copilot] Respond - Health Check OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[Copilot] Intent Classification (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "pinData": {},
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "ea1280cb-c459-4a8b-a082-584aec04ed40",
+  "versionId": "9ec52f22-5586-4363-85b5-b603c55811af",
   "meta": {
-    "instanceId": "ai-recruitment-system"
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4738efd1a6815c78b2d2cb38ac9b1217adeb75828e01f45e7ffe5bf34d2f8a75"
   },
   "nodeGroups": [],
-  "id": "8075969c-ef06-4dc3-a214-deaa066738e3",
+  "id": "HWeYci9e0LhKHleI",
   "tags": []
 }
