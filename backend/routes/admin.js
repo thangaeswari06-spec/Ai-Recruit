@@ -279,11 +279,8 @@ router.post(
 //    registered and the workflow ran, i.e. it's genuinely active.
 // =====================================================
 const N8N_WORKFLOWS = [
-  { label: "Job Intelligence", path: "job-intelligence" },
-  { label: "Resume Upload", path: "resume-upload" },
-  { label: "Evaluate Candidates", path: "evaluate-candidates" },
+  { label: "Recruiter Intake", path: "recruiter-intake" },
   { label: "Copilot Chat", path: "copilot-chat" },
-  { label: "Hiring Decision", path: "hiring-decision" },
 ];
  
 router.get(

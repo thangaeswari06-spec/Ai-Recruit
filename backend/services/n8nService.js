@@ -22,23 +22,23 @@ async function postJSON(path, body) {
 }
 
 export const n8nService = {
+  // Job creation — routed through the consolidated "Recruiter Intake" webhook.
   generateJob({ title, department, location, experience_level, notes }) {
-    return postJSON("job-intelligence", { title, department, location, experience_level, notes });
+    return postJSON("recruiter-intake", { title, department, location, experience_level, notes });
   },
 
+  // Resume upload — same "Recruiter Intake" webhook, routed by the attached file.
   async uploadResume({ fileBuffer, filename, mimetype, job_id, candidate_email, candidate_name, candidate_phone }) {
     const form = new FormData();
     form.append("resume", fileBuffer, { filename, contentType: mimetype });
     if (job_id) form.append("job_id", job_id);
     if (candidate_email) form.append("candidate_email", candidate_email);
-    // Forwarded so the n8n workflow can use the form values directly instead of
-    // relying only on AI extraction from the PDF.
     if (candidate_name) form.append("candidate_name", candidate_name);
     if (candidate_phone) form.append("candidate_phone", candidate_phone);
 
     let res;
     try {
-      res = await fetch(`${N8N_BASE}/resume-upload`, {
+      res = await fetch(`${N8N_BASE}/recruiter-intake`, {
         method: "POST",
         body: form,
         headers: form.getHeaders(),
@@ -59,19 +59,9 @@ export const n8nService = {
     return data;
   },
 
-  evaluateCandidates({ job_id }) {
-    return postJSON("evaluate-candidates", { job_id });
-  },
-
+  // Copilot chat — unchanged, still its own webhook.
   copilotChat({ message, user_id }) {
     return postJSON("copilot-chat", { message, user_id });
-  },
-
-  triggerHiringDecision({ interview_id }) {
-    return postJSON("hiring-decision", { interview_id });
-  },
-  submitHiringApproval({ interview_id, approved }) {
-    return postJSON("hiring-decision", { interview_id, approved });
   },
 };
 

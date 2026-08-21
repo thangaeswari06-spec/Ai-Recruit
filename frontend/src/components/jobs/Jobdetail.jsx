@@ -17,12 +17,8 @@ export default function JobDetail() {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirmClose, setConfirmClose] = useState(false);
-  const [evaluating, setEvaluating] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  // Inline "apply for this job" form — lets a recruiter add a candidate
-  // straight from the job page, and the new applicant shows up in the
-  // Applicants list below right after submitting.
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyForm, setApplyForm] = useState({ name: "", email: "", phone: "" });
   const [applyFile, setApplyFile] = useState(null);
@@ -58,17 +54,6 @@ export default function JobDetail() {
     setConfirmClose(false);
   }
 
-  async function handleEvaluate() {
-    setEvaluating(true);
-    try {
-      await candidateService.evaluateCandidates(id);
-      const refreshed = await jobService.getJob(id);
-      setJob(refreshed);
-    } finally {
-      setEvaluating(false);
-    }
-  }
-
   async function handleApplySubmit(e) {
     e.preventDefault();
     const errs = {};
@@ -92,7 +77,7 @@ export default function JobDetail() {
       setApplyForm({ name: "", email: "", phone: "" });
       setApplyFile(null);
       setApplyOpen(false);
-      await loadJob(); // refresh so the new applicant shows up below immediately
+      await loadJob();
     } catch (err) {
       setApplyErrors({ submit: err.message });
     } finally {
@@ -129,9 +114,6 @@ export default function JobDetail() {
                     </button>
                   </>
                 )}
-                <button className="btn btn-primary btn-sm" onClick={handleEvaluate} disabled={evaluating}>
-                  {evaluating ? "Evaluating…" : "✨ AI re-rank candidates"}
-                </button>
                 {job.status !== "closed" && (
                   <button className="btn btn-danger btn-sm" onClick={() => setConfirmClose(true)}>Close job</button>
                 )}

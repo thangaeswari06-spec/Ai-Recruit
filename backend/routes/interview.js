@@ -2,13 +2,11 @@ import { Router } from "express";
 import { verifyToken } from "../middleware/verifyToken.js";
 import { checkRole } from "../middleware/checkRole.js";
 import { supabaseAdmin } from "../lib/supabaseAdmin.js";
-import { n8nService } from "../services/n8nService.js";
-import { logAudit } from "../services/auditLogger.js";
 import { calendarService } from "../services/calendarservice.js";
 import { emailService } from "../services/emailService.js";
- 
+
 const router = Router();
- 
+
 router.get("/", verifyToken, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("interviews")
@@ -17,7 +15,38 @@ router.get("/", verifyToken, async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   res.json({ interviews: data });
 });
- 
+
+// Builds a calendar-invite-style HTML email: date/time block, a
+// "Join with Google Meet" button, and the plain meeting link underneath —
+// same layout as a Google Calendar invite email.
+function buildInterviewEmailHtml({ greetingName, introLine, whenText, meetLink }) {
+  return `
+  <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a2e;">
+    <p style="font-size: 15px;">Hi ${greetingName},</p>
+    <p style="font-size: 15px; line-height: 1.5;">${introLine}</p>
+
+    <table style="width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; margin: 20px 0; border-collapse: collapse;">
+      <tr>
+        <td style="padding: 16px 20px;">
+          <p style="margin: 0 0 4px; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em;">When</p>
+          <p style="margin: 0 0 16px; font-size: 15px; font-weight: 600;">${whenText}</p>
+
+          ${meetLink ? `
+          <a href="${meetLink}" style="display: inline-block; background: #4C5FD5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 18px; border-radius: 6px; margin-bottom: 14px;">
+            Join with Google Meet
+          </a>
+          <p style="margin: 8px 0 0; font-size: 12px; color: #6b7280;">Meeting link</p>
+          <p style="margin: 2px 0 0; font-size: 14px;"><a href="${meetLink}" style="color: #4C5FD5;">${meetLink}</a></p>
+          ` : `<p style="font-size: 13px; color: #6b7280;">Meeting link will be shared shortly.</p>`}
+        </td>
+      </tr>
+    </table>
+
+    <p style="font-size: 14px; color: #444; line-height: 1.5;">Please join a couple of minutes early to test your audio/video.</p>
+    <p style="font-size: 14px; margin-top: 24px;">Best regards,<br/><strong>AI Recruit</strong></p>
+  </div>`;
+}
+
 router.post("/", verifyToken, checkRole("admin", "recruiter"), async (req, res) => {
   const { application_id, interviewer_id, scheduled_at, questions } = req.body;
   const { data, error } = await supabaseAdmin
@@ -26,60 +55,94 @@ router.post("/", verifyToken, checkRole("admin", "recruiter"), async (req, res) 
     .select()
     .single();
   if (error) return res.status(400).json({ error: error.message });
- 
-  // Optional: create a Google Calendar event with a reminder, if the user connected a Google account
+
+  const { data: appRow } = await supabaseAdmin
+    .from("applications")
+    .select("*, candidates(name, email), jobs(title)")
+    .eq("id", application_id)
+    .single();
+
+  const when = new Date(scheduled_at).toLocaleString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  }) + " (India Standard Time)";
+
+  const candidateName = appRow?.candidates?.name || "there";
+  const jobTitle = appRow?.jobs?.title || "the role";
+
+  // Create the Google Calendar event first (auto Google Meet link + a
+  // reminder before the interview) so the link is ready for both emails.
+  // Google Calendar's own invite also drops a reminder on each attendee's
+  // calendar — that covers the "reminder" requirement automatically.
+  let meetLink = null;
   if (req.body.google_refresh_token) {
     try {
-      await calendarService.createInterviewEvent({
+      const attendees = [
+        ...(appRow?.candidates?.email ? [appRow.candidates.email] : []),
+        ...(req.body.interviewer_email ? [req.body.interviewer_email] : []),
+        ...(req.body.attendee_emails || []),
+      ];
+      const event = await calendarService.createInterviewEvent({
         refreshToken: req.body.google_refresh_token,
-        summary: "Candidate interview",
-        description: questions,
+        summary: `Interview — ${candidateName} for ${jobTitle}`,
+        description: questions || "Candidate interview",
         startTime: scheduled_at,
-        attendeeEmails: req.body.attendee_emails || [],
+        attendeeEmails: attendees,
         reminderMinutesBefore: req.body.reminder_minutes || 30,
       });
+      meetLink = event.meetLink;
     } catch (e) {
       console.error("Calendar event creation failed:", e.message);
     }
   }
- 
-  // Always send an immediate confirmation email to the candidate (and the
-  // interviewer, if an email was passed) with the interview date/time — this
-  // is the reminder that "whoever's interview is scheduled" now gets.
+
   try {
-    const { data: appRow } = await supabaseAdmin
-      .from("applications")
-      .select("*, candidates(name, email), jobs(title)")
-      .eq("id", application_id)
-      .single();
- 
-    const when = new Date(scheduled_at).toLocaleString("en-IN", {
-      dateStyle: "full",
-      timeStyle: "short",
-    });
- 
     if (appRow?.candidates?.email) {
       await emailService.send({
         to: appRow.candidates.email,
-        subject: `Interview scheduled — ${appRow.jobs?.title || "your application"}`,
-        text: `Hi ${appRow.candidates.name || ""},\n\nYour interview for ${appRow.jobs?.title || "the role"} is scheduled on ${when}.\n\nWe'll be in touch with any further details before then.\n\n— AI Recruit`,
+        subject: `Interview scheduled — ${jobTitle}`,
+        text:
+          `Hi ${candidateName},\n\nYour interview for ${jobTitle} is confirmed for ${when}.\n` +
+          (meetLink ? `\nJoin via Google Meet: ${meetLink}\n` : "") +
+          `\nPlease join a few minutes early. We look forward to speaking with you.\n\nBest regards,\nAI Recruit`,
+        html: buildInterviewEmailHtml({
+          greetingName: candidateName,
+          introLine: `Your interview for <strong>${jobTitle}</strong> is confirmed.`,
+          whenText: when,
+          meetLink,
+        }),
       });
     }
- 
+
     if (req.body.interviewer_email) {
       await emailService.send({
         to: req.body.interviewer_email,
-        subject: `Interview reminder — ${appRow?.candidates?.name || "candidate"} for ${appRow?.jobs?.title || "a role"}`,
-        text: `You're scheduled to interview ${appRow?.candidates?.name || "a candidate"} for ${appRow?.jobs?.title || "a role"} on ${when}.`,
+        subject: `Interview reminder — ${candidateName} for ${jobTitle}`,
+        text:
+          `Hi,\n\nYou're scheduled to interview ${candidateName} for ${jobTitle} on ${when}.\n` +
+          (meetLink ? `\nJoin via Google Meet: ${meetLink}\n` : "") +
+          `\nThanks,\nAI Recruit`,
+        html: buildInterviewEmailHtml({
+          greetingName: "there",
+          introLine: `You're scheduled to interview <strong>${candidateName}</strong> for <strong>${jobTitle}</strong>.`,
+          whenText: when,
+          meetLink,
+        }),
       });
     }
   } catch (e) {
     console.error("Interview confirmation email failed:", e.message);
   }
- 
-  res.json({ interview: data });
+
+  res.json({ interview: data, meetLink });
 });
- 
+
 router.post("/:id/feedback", verifyToken, async (req, res) => {
   const { rating, feedback, recommendation } = req.body;
   const { data, error } = await supabaseAdmin
@@ -89,30 +152,7 @@ router.post("/:id/feedback", verifyToken, async (req, res) => {
     .select()
     .single();
   if (error) return res.status(400).json({ error: error.message });
- 
-  try {
-    const decision = await n8nService.triggerHiringDecision({ interview_id: req.params.id });
-    res.json({ interview: data, decision });
-  } catch (err) {
-    res.json({ interview: data, decisionError: err.message });
-  }
+  res.json({ interview: data });
 });
- 
-router.post("/:id/approve", verifyToken, checkRole("admin", "recruiter"), async (req, res) => {
-  const { approved } = req.body;
-  try {
-    const result = await n8nService.submitHiringApproval({ interview_id: req.params.id, approved });
-    await logAudit({
-      userId: req.user.id,
-      action: approved ? "approve_hire" : "reject_hire",
-      targetTable: "interviews",
-      targetId: req.params.id,
-    });
-    res.json(result);
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
-  }
-});
- 
+
 export default router;
- 

@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 
 // Google Calendar integration for interview scheduling + reminders.
-// Requires a Google service account or OAuth client set up in Google Cloud Console.
+// Requires a Google OAuth client set up in Google Cloud Console.
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
@@ -14,8 +14,18 @@ function getCalendarClient(refreshToken) {
 }
 
 export const calendarService = {
-  // Creates an event with a reminder N minutes before the interview
-  async createInterviewEvent({ refreshToken, summary, description, startTime, durationMinutes = 45, attendeeEmails = [], reminderMinutesBefore = 30 }) {
+  // Creates a calendar event with an auto-generated Google Meet link and a
+  // reminder N minutes before the interview. Returns the event, including
+  // event.hangoutLink (the Meet URL) so it can be added to the email.
+  async createInterviewEvent({
+    refreshToken,
+    summary,
+    description,
+    startTime,
+    durationMinutes = 45,
+    attendeeEmails = [],
+    reminderMinutesBefore = 30,
+  }) {
     const calendar = getCalendarClient(refreshToken);
     const endTime = new Date(new Date(startTime).getTime() + durationMinutes * 60000);
 
@@ -27,16 +37,31 @@ export const calendarService = {
       attendees: attendeeEmails.map((email) => ({ email })),
       reminders: {
         useDefault: false,
-        overrides: [{ method: "email", minutes: reminderMinutesBefore }, { method: "popup", minutes: reminderMinutesBefore }],
+        overrides: [
+          { method: "email", minutes: reminderMinutesBefore },
+          { method: "popup", minutes: reminderMinutesBefore },
+        ],
+      },
+      // Auto-creates a Google Meet link for the interview
+      conferenceData: {
+        createRequest: {
+          requestId: `interview-${Date.now()}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
       },
     };
 
     const res = await calendar.events.insert({
       calendarId: "primary",
       requestBody: event,
+      conferenceDataVersion: 1, // required for conferenceData to take effect
       sendUpdates: "all",
     });
-    return res.data;
+
+    return {
+      ...res.data,
+      meetLink: res.data.hangoutLink || null,
+    };
   },
 
   async cancelEvent({ refreshToken, eventId }) {

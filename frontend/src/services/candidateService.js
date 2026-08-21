@@ -27,8 +27,6 @@ export const candidateService = {
     return application;
   },
 
-  // Calls backend -> n8n Workflow 2 (resume-upload): extraction, parsing, embedding, insert
-  // Calls backend -> n8n Workflow 2 (resume-upload): extraction, parsing, embedding, insert
   async uploadResume(file, { jobId, candidateEmail, candidateName, candidatePhone } = {}) {
     const form = new FormData();
     form.append("resume", file);
@@ -45,6 +43,7 @@ export const candidateService = {
     if (!res.ok) throw new Error((await res.json()).error || "Resume processing failed");
     return res.json();
   },
+
   async updateStage(applicationId, stage) {
     const res = await fetch(`${API_BASE}/candidates/${applicationId}/stage`, {
       method: "PATCH",
@@ -63,17 +62,6 @@ export const candidateService = {
       body: JSON.stringify({ note, tags }),
     });
     if (!res.ok) throw new Error((await res.json()).error || "Failed to add note");
-    return res.json();
-  },
-
-  // Calls backend -> n8n Workflow 3 (evaluate-candidates): vector search, AI score, rerank top 5
-  async evaluateCandidates(jobId) {
-    const res = await fetch(`${API_BASE}/matching/evaluate`, {
-      method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify({ job_id: jobId }),
-    });
-    if (!res.ok) throw new Error((await res.json()).error || "Evaluation failed");
     return res.json();
   },
 };
